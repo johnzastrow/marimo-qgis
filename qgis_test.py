@@ -8,19 +8,21 @@
 import marimo
 
 __generated_with = "0.21.1"
-
 app = marimo.App()
 
 
 @app.cell
 def _():
     import marimo as mo
+
     return (mo,)
 
 
 @app.cell
 def _(mo):
-    mo.md("""# QGIS4 + Marimo""")
+    mo.md("""
+    # QGIS4 + Marimo
+    """)
     return
 
 
@@ -39,20 +41,19 @@ def _():
 
     qgs = QgsApplication([], False)
     qgs.initQgis()
-
-    return Qgis, QgsApplication, qgs
+    return (Qgis,)
 
 
 @app.cell
 def _(Qgis, mo):
     mo.md(f"""
-## QGIS Version Info
+    ## QGIS Version Info
 
-| Field | Value |
-|-------|-------|
-| Version string | `{Qgis.version()}` |
-| Version int | `{Qgis.versionInt()}` |
-| Release name | `{Qgis.releaseName()}` |
+    | Field | Value |
+    |-------|-------|
+    | Version string | `{Qgis.version()}` |
+    | Version int | `{Qgis.versionInt()}` |
+    | Release name | `{Qgis.releaseName()}` |
     """)
     return
 

@@ -1,12 +1,3 @@
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#     "marimo",
-#     "pandas",
-#     "numpy",
-# ]
-# ///
-
 import marimo
 
 __generated_with = "0.21.1"
@@ -54,8 +45,9 @@ def _():
 
     sys.path.insert(0, "/usr/share/qgis/python")
 
-    # Prevent Qt from trying to connect to a display server.
-    # Without this, QGIS raises a Qt platform error in headless environments.
+    # Belt-and-suspenders: the marimo-qgis wrapper sets QT_QPA_PLATFORM=offscreen
+    # and QT_PLUGIN_PATH before Python starts so the spawn subprocess inherits
+    # them.  The setdefault here is a fallback for direct invocations.
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from qgis.core import (
