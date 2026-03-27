@@ -15,6 +15,11 @@ geodesic distance matrix using `QgsDistanceArea` (true ellipsoidal distances on 
 and analyses closest/farthest pairs and per-station nearest neighbours with Pandas —
 all displayed as interactive marimo tables.
 
+`example/gpkg_summary.py` loads a 9-layer GeoPackage (Youngstown NY area, EPSG:26918),
+builds a layer inventory using `dataProvider().subLayers()`, extracts decennial
+population data from the `town` layer, and computes total road network length with
+`QgsDistanceArea` — all displayed as interactive marimo tables.
+
 ---
 
 ## Quick start — Linux
@@ -187,6 +192,10 @@ marimo-qgis/
 ├── stations_analysis.py # example notebook: QGIS distance matrix + Pandas analysis
 ├── qgis_test.py         # minimal notebook: confirms QGIS version
 ├── stations.gpkg        # sample data: CWOP weather stations in Maine, USA
+├── example/
+│   ├── example.gpkg     # Youngstown NY area: 9-layer GeoPackage, EPSG:26918
+│   ├── gpkg_summary.py  # example notebook: layer inventory, population trends, road length
+│   └── INSTRUCTIONS.md  # quick start for this example
 ├── pyproject.toml       # project metadata and dependencies
 ├── TROUBLESHOOTING.md   # debugging guide for marimo + QGIS integration issues
 └── MARIMO_QGIS.md       # additional setup notes
