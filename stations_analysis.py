@@ -229,5 +229,99 @@ def _(QgsDistanceArea, QgsPointXY, QgsProject, df, layer, mo, pd):
     return (dist_df,)
 
 
+@app.cell
+def _(mo):
+    mo.md("""
+## Step 4 — Analysis with Pandas
+
+Now that PyQGIS has done the spatial heavy lifting, Pandas takes over for the
+analytical work.
+
+**Closest and farthest pairs:**
+We use `.stack()` to convert the N×N matrix into a Series of `(station_A, station_B)`
+index pairs, then `.idxmin()` / `.idxmax()` to find the pair labels directly. This
+gives us a `(row_label, col_label)` tuple — both station names — rather than just
+one side of the pair.
+
+The diagonal (self-distance = 0) is masked out before finding the minimum by replacing
+zeros with `inf`.
+
+**Per-station nearest neighbour:**
+For each station we find the closest other station using `.idxmin(axis=1)` on the
+masked matrix. This is a clean vector operation — no loops required.
+
+**Summary statistics:**
+We extract the upper triangle of the matrix (to avoid counting each pair twice) and
+run Pandas `.describe()` to get count, mean, min, max, and quartiles across all 36
+unique station-pair distances.
+    """)
+    return
+
+
+@app.cell
+def _(dist_df, mo, pd):
+    import numpy as np
+
+    # --- closest pair ---
+    _masked = dist_df.replace(0, float("inf"))
+    closest_pair = _masked.stack().idxmin()   # (site_A, site_B)
+    closest_km   = _masked.stack().min()
+
+    # --- farthest pair ---
+    farthest_pair = dist_df.stack().idxmax()  # (site_A, site_B)
+    farthest_km   = dist_df.stack().max()
+
+    # --- per-station nearest neighbour ---
+    _nn      = _masked.idxmin(axis=1).rename("nearest")
+    _nn_dist = _masked.min(axis=1).rename("distance_km")
+    nn_df    = pd.concat([_nn, _nn_dist.round(2)], axis=1).reset_index(names="station")
+
+    # --- summary stats (upper triangle only — avoids double-counting) ---
+    _upper = dist_df.where(np.triu(np.ones(dist_df.shape, dtype=bool), k=1))
+    _stats = _upper.stack().describe().round(2)
+
+    # Use mo.vstack to display both the summary card and the nearest-neighbour table
+    # in one cell. In marimo only the last expression is rendered, so wrapping both
+    # in mo.vstack is the correct way to show multiple display elements from one cell.
+    _summary = mo.md(f"""
+## Results
+
+| Metric | Stations | Distance |
+|--------|----------|----------|
+| **Closest pair** | `{closest_pair[0]}` ↔ `{closest_pair[1]}` | **{closest_km:.2f} km** |
+| **Farthest pair** | `{farthest_pair[0]}` ↔ `{farthest_pair[1]}` | **{farthest_km:.2f} km** |
+| Mean distance (all pairs) | — | {_stats['mean']:.2f} km |
+| Std deviation | — | {_stats['std']:.2f} km |
+| 25th percentile | — | {_stats['25%']:.2f} km |
+| 75th percentile | — | {_stats['75%']:.2f} km |
+
+### Nearest neighbour for each station
+    """)
+    _table = mo.ui.table(nn_df)
+    mo.vstack([_summary, _table])
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+---
+
+## What's next
+
+This notebook establishes the core PyQGIS → Pandas → marimo pipeline. The next steps are:
+
+- **QGIS Processing Toolbox** — replace the `dist_matrix` cell with a Processing
+  algorithm (e.g., `qgis:distancematrix`) and pipe its output into the same Pandas
+  analysis cells
+- **Map display** — render station locations on a map using marimo's widget ecosystem
+- **Statistical analysis** — bring in more weather observation data from the `weather`
+  project and join it to this station geometry for spatial statistics
+
+*Run this notebook interactively with: `./marimo-qgis edit stations_analysis.py`*
+    """)
+    return
+
+
 if __name__ == "__main__":
     app.run()
