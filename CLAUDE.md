@@ -30,6 +30,7 @@ uv run marimo edit qgis_test.py
 
 ## Key Files
 
+- `stations_analysis.py` — Distance analysis notebook: loads stations.gpkg, QgsDistanceArea geodesic matrix, Pandas nearest-neighbour analysis
 - `qgis_test.py` — QGIS notebook (tests `Qgis.version()`)
 - `test_simple.py` — Minimal notebook with no QGIS deps (also broken)
 - `marimo-qgis` — Wrapper script that sets `PYTHONPATH` and runs marimo
