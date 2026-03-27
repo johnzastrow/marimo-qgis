@@ -123,5 +123,52 @@ def _(QgsVectorLayer):
     return (layer,)
 
 
+@app.cell
+def _(mo):
+    mo.md("""
+## Step 2 — From QGIS features to a Pandas DataFrame
+
+PyQGIS represents each row in the layer as a `QgsFeature` object. We iterate the
+layer with `layer.getFeatures()` and pull the attributes we care about into a plain
+Python dict, then hand the list of dicts to `pd.DataFrame`.
+
+**Why Pandas here, not pure PyQGIS?**
+QGIS is excellent at spatial operations — reprojection, distance, overlay, topology.
+Pandas is excellent at tabular analysis — groupby, pivot, describe, merge. We use
+each tool for what it is best at and convert at the boundary between the two worlds.
+
+The fields we extract are:
+- `site` — station identifier (used as the index in the distance matrix)
+- `city`, `county` — human-readable location context
+- `lat`, `long` — geographic coordinates (also stored in the point geometry, but
+  easier to access from attributes for display purposes)
+- `elev_m` — station elevation in metres above sea level
+- `status` — whether the station is currently active
+    """)
+    return
+
+
+@app.cell
+def _(layer, mo):
+    import pandas as pd
+
+    _records = []
+    for _feat in layer.getFeatures():
+        _records.append({
+            "site":    _feat["site"],
+            "city":    _feat["city"],
+            "county":  _feat["county"],
+            "lat":     _feat["lat"],
+            "long":    _feat["long"],
+            "elev_m":  _feat["elev_m"],
+            "status":  _feat["status"],
+        })
+
+    df = pd.DataFrame(_records)
+
+    mo.ui.table(df[["site", "city", "county", "elev_m", "status"]])
+    return df, pd
+
+
 if __name__ == "__main__":
     app.run()
