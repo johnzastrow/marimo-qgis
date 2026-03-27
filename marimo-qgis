@@ -1,0 +1,4 @@
+#!/bin/bash
+export PYTHONPATH=/usr/share/qgis/python
+cd /home/jcz/Github/marimo_qgis
+exec uv run marimo "$@"
