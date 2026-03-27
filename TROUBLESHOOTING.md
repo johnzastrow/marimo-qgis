@@ -2,9 +2,14 @@
 
 ## Current Status
 
-**WORKING**: QGIS Python imports work correctly when using `PYTHONPATH=/usr/share/qgis/python`
+**WORKING**: Full QGIS4 + marimo integration confirmed via `marimo export html`.
 
-**NOT WORKING**: Kernel/notebook execution - cells do not produce output when running in browser
+- QGIS 4.0.0-Norrköping (`/usr/share/qgis/python`)
+- `QgsApplication` initialises headlessly with `gui=False` + `QT_QPA_PLATFORM=offscreen`
+- Sample data at `/usr/share/qgis/resources/data/world_map.gpkg`
+
+**RESOLVED**: The previous "cells not executing" issue was a stale `__marimo__/session/` cache.
+The session cache is only populated by the interactive edit server; `marimo export html` always re-executes.
 
 ## Verified Working
 

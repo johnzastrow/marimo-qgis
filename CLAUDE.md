@@ -25,9 +25,8 @@ uv run marimo edit qgis_test.py
 
 ## Known Issues / Status
 
-- **WORKING**: QGIS Python imports via `PYTHONPATH=/usr/share/qgis/python uv run python -c "from qgis.core import Qgis; print(Qgis.version())"`
-- **UNRESOLVED**: Marimo cell execution — cells render in browser but produce no output (`"outputs": []` in session cache). Happens even for cells with no QGIS imports (confirmed with `test_simple.py`).
-- **Root cause suspected**: Marimo's kernel subprocess isn't starting properly, possibly a Qt/GUI initialization conflict or environment issue with how marimo spawns its kernel.
+- **WORKING**: Full QGIS4 + marimo integration. `marimo export html qgis_test.py` exits 0 with QGIS version table and sample data rendered.
+- **RESOLVED**: Previous "cells not executing" was a stale `__marimo__/session/` cache — not a real kernel failure. `marimo export html` always re-executes and confirms cells work.
 
 ## Key Files
 
