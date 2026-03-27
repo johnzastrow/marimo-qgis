@@ -170,5 +170,64 @@ def _(layer, mo):
     return df, pd
 
 
+@app.cell
+def _(mo):
+    mo.md("""
+## Step 3 — Geodesic distance matrix via QgsDistanceArea
+
+`QgsDistanceArea` is QGIS's geodesic measurement engine. It computes distances on
+the surface of an ellipsoid (in our case WGS84) rather than treating coordinates as
+flat 2D numbers — which would be badly wrong at the latitudes and scales involved.
+
+**Why geodesic matters here:**
+Maine spans roughly 3° of longitude and 3° of latitude. A naive Euclidean distance
+on raw lat/long coordinates would give results in degrees, not metres, and would not
+account for the fact that a degree of longitude at 44°N is shorter than at the equator
+(by a factor of cos(44°) ≈ 0.72). Geodesic computation handles all of this correctly.
+
+**The three setup calls:**
+
+- `da.setEllipsoid("WGS84")` — use the WGS84 ellipsoid model
+- `da.setSourceCrs(crs, context)` — tells QGIS the input CRS so it can transform
+  correctly; without this it may fall back to planar (Euclidean) distance silently
+
+`measureLine(p1, p2)` returns the geodesic distance in **metres**. We divide by 1000
+for kilometres.
+
+The result is a symmetric N×N DataFrame with station `site` codes as both index and
+columns. The diagonal is 0 (distance from a station to itself).
+    """)
+    return
+
+
+@app.cell
+def _(QgsDistanceArea, QgsPointXY, QgsProject, df, layer, mo, pd):
+    _da = QgsDistanceArea()
+    _da.setEllipsoid("WGS84")
+    _da.setSourceCrs(layer.crs(), QgsProject.instance().transformContext())
+
+    _sites = df["site"].tolist()
+    _coords = {
+        row["site"]: QgsPointXY(row["long"], row["lat"])
+        for _, row in df.iterrows()
+    }
+
+    _matrix = {}
+    for _s1 in _sites:
+        _matrix[_s1] = {}
+        for _s2 in _sites:
+            _dist_m = _da.measureLine(_coords[_s1], _coords[_s2])
+            _matrix[_s1][_s2] = round(_dist_m / 1000, 4)
+
+    dist_df = pd.DataFrame(_matrix)
+
+    # Assign the table to a variable, then leave it as the final bare expression
+    # so marimo renders it. The return statement after exports dist_df to
+    # downstream cells without affecting what is displayed.
+    _table = mo.ui.table(dist_df.round(2))
+    _table
+    return (dist_df,)
+
+
 if __name__ == "__main__":
     app.run()
