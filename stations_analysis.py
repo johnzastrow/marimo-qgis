@@ -90,5 +90,38 @@ def _(Qgis, mo):
     return
 
 
+@app.cell
+def _(mo):
+    mo.md("""
+## Step 1 — Load the station layer with PyQGIS
+
+We use `QgsVectorLayer` to open `stations.gpkg`. This is the standard PyQGIS entry
+point for vector data: it handles GeoPackage, Shapefile, PostGIS, and any other
+OGR-supported format through a unified interface.
+
+The `'ogr'` provider string tells QGIS to use the OGR/GDAL library for reading —
+the same library that powers GDAL command-line tools. Under the hood, QGIS is calling
+into the same C++ spatial library used by the desktop application.
+
+`layer.isValid()` is the canonical QGIS check that the file opened successfully and
+the geometry/attribute schema was parsed without errors. A layer can open without
+raising a Python exception but still be invalid (e.g., corrupted geometry index),
+so this check is essential.
+    """)
+    return
+
+
+@app.cell
+def _(QgsVectorLayer):
+    # Use a hardcoded absolute path — pathlib.Path(__file__) raises NameError
+    # inside a marimo cell function because __file__ is not in the cell's local scope.
+    _gpkg = "/home/jcz/Github/marimo_qgis/stations.gpkg"
+    layer = QgsVectorLayer(_gpkg, "stations", "ogr")
+
+    assert layer.isValid(), f"Layer failed to load from {_gpkg}"
+
+    return (layer,)
+
+
 if __name__ == "__main__":
     app.run()
