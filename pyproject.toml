@@ -8,3 +8,10 @@ dependencies = [
     "pandas",
     "numpy",
 ]
+
+[dependency-groups]
+dev = [
+    "altair>=6.0.0",
+    "vegafusion>=2.0.3",
+    "vl-convert-python>=1.9.0.post1",
+]
