@@ -4,6 +4,17 @@
 #     "marimo",
 # ]
 # ///
+#
+# QGIS bindings (qgis.core) are NOT listed above because they ship with the
+# QGIS application and are not available on PyPI.  They are added to sys.path
+# at runtime inside the QGIS init cell below.
+#
+# Run with:  uv run marimo edit qgis_test.py
+#            uv run marimo run  qgis_test.py
+#
+# No wrapper script is needed.  The QGIS init cell handles both
+# sys.path (equivalent to PYTHONPATH) and QT_QPA_PLATFORM before
+# QgsApplication is created — the only point at which Qt reads them.
 
 import marimo
 

@@ -1,3 +1,23 @@
+# /// script
+# requires-python = ">=3.13"
+# dependencies = [
+#     "marimo",
+#     "pandas",
+#     "numpy",
+# ]
+# ///
+#
+# QGIS bindings (qgis.core) are NOT listed above because they ship with the
+# QGIS application and are not available on PyPI.  They are added to sys.path
+# at runtime inside the QGIS init cell below.
+#
+# Run with:  uv run marimo edit stations_analysis.py
+#            uv run marimo run  stations_analysis.py
+#
+# No wrapper script is needed.  The QGIS init cell handles both
+# sys.path (equivalent to PYTHONPATH) and QT_QPA_PLATFORM before
+# QgsApplication is created — the only point at which Qt reads them.
+
 import marimo
 
 __generated_with = "0.21.1"
@@ -45,9 +65,10 @@ def _():
 
     sys.path.insert(0, "/usr/share/qgis/python")
 
-    # Belt-and-suspenders: the marimo-qgis wrapper sets QT_QPA_PLATFORM=offscreen
-    # and QT_PLUGIN_PATH before Python starts so the spawn subprocess inherits
-    # them.  The setdefault here is a fallback for direct invocations.
+    # Qt reads QT_QPA_PLATFORM when QgsApplication is created, not at import
+    # time — so setdefault() here runs before the critical moment.  setdefault
+    # leaves the variable alone if it was already set by the parent process
+    # (e.g. when launched from within a live QGIS session).
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from qgis.core import (
@@ -105,9 +126,12 @@ so this check is essential.
 
 @app.cell
 def _(QgsVectorLayer):
-    # Use a hardcoded absolute path — pathlib.Path(__file__) raises NameError
-    # inside a marimo cell function because __file__ is not in the cell's local scope.
-    _gpkg = "/home/jcz/Github/marimo_qgis/stations.gpkg"
+    # Locate the GeoPackage relative to THIS file, not os.getcwd().
+    # os.getcwd() reflects the launch directory, which varies.  __file__ is
+    # always the notebook's own path, so dirname(__file__) is always the repo
+    # root where stations.gpkg lives — regardless of how the notebook was started.
+    import os as _os
+    _gpkg = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "stations.gpkg")
     layer = QgsVectorLayer(_gpkg, "stations", "ogr")
 
     assert layer.isValid(), f"Layer failed to load from {_gpkg}"
@@ -310,7 +334,7 @@ This notebook establishes the core PyQGIS → Pandas → marimo pipeline. The ne
 - **Statistical analysis** — bring in more weather observation data from the `weather`
   project and join it to this station geometry for spatial statistics
 
-*Run this notebook interactively with: `./marimo-qgis edit stations_analysis.py`*
+*Run this notebook interactively with: `uv run marimo edit stations_analysis.py`*
     """)
     return
 

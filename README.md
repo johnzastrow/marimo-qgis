@@ -8,17 +8,20 @@ This repository contains working notebooks and a setup guide for the combination
 - **Pandas** tabular analysis
 - **marimo** reactive, browser-based Python notebooks
 
-## Example notebook
+## Example notebooks
 
-`stations_analysis.py` loads a set of weather stations from a GeoPackage, computes a
-geodesic distance matrix using `QgsDistanceArea` (true ellipsoidal distances on WGS84),
-and analyses closest/farthest pairs and per-station nearest neighbours with Pandas —
-all displayed as interactive marimo tables.
+`example/simple_marimo_qgis.py` is the recommended starting point — a minimal,
+extensively-commented notebook that opens `example.gpkg`, filters building polygons,
+and sums their geodesic area with `QgsDistanceArea`.
 
-`example/gpkg_summary.py` loads a 9-layer GeoPackage (Youngstown NY area, EPSG:26918),
-builds a layer inventory using `dataProvider().subLayers()`, extracts decennial
-population data from the `town` layer, and computes total road network length with
-`QgsDistanceArea` — all displayed as interactive marimo tables.
+`example/gpkg_summary.py` explores a 20-layer GeoPackage (Youngstown NY area, three
+CRS: EPSG:26918, EPSG:4269, EPSG:4326), builds a layer inventory using
+`QgsProviderRegistry.querySublayers()`, extracts decennial population data, and
+computes total road network length — all displayed as interactive marimo tables.
+
+`stations_analysis.py` loads CWOP weather stations from a GeoPackage, computes a
+geodesic distance matrix using `QgsDistanceArea`, and analyses closest/farthest pairs
+and per-station nearest neighbours with Pandas.
 
 ---
 
@@ -64,7 +67,7 @@ cd marimo-qgis
 # with the system QGIS Qt6 and causes an ImportError at runtime.
 uv venv --python 3.13 --system-site-packages
 
-uv pip install marimo pandas numpy
+uv pip install marimo pandas numpy matplotlib
 ```
 
 Verify the venv finds the **system** PyQt6, not a bundled wheel:
@@ -76,34 +79,37 @@ Verify the venv finds the **system** PyQt6, not a bundled wheel:
 
 ### 4. Run a notebook
 
-Use the `marimo-qgis` wrapper script. It sets the required environment variables
-before Python starts (see [Why the wrapper?](#why-the-wrapper) below):
+No wrapper script or exported environment variables are needed:
 
 ```bash
 # Interactive editing
-./marimo-qgis edit stations_analysis.py
+uv run marimo edit example/simple_marimo_qgis.py
+
+# View-only (no code editing)
+uv run marimo run example/gpkg_summary.py
 
 # Export to static HTML (headless, no browser needed)
-./marimo-qgis export html stations_analysis.py -o output.html
+uv run marimo export html example/gpkg_summary.py -o summary.html
 ```
 
-Your browser will open automatically. The notebook loads the included
-`stations.gpkg` and displays QGIS version info, the distance matrix, and
-nearest-neighbour analysis.
+Your browser will open automatically in edit/run mode.
 
 ---
 
 ## Writing your own QGIS notebook
 
-### Minimal cell pattern
+### Minimal QGIS init cell
+
+Every QGIS notebook needs one init cell that configures the environment and
+creates the `QgsApplication` singleton:
 
 ```python
 @app.cell
 def _():
-    import sys, os
+    import os, sys
 
-    sys.path.insert(0, "/usr/share/qgis/python")   # adjust if QGIS is elsewhere
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # fallback if no wrapper
+    sys.path.insert(0, "/usr/share/qgis/python")   # find PyQGIS bindings
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # headless Qt
 
     from qgis.core import QgsApplication, Qgis
 
@@ -113,74 +119,61 @@ def _():
     return Qgis, QgsApplication, qgs
 ```
 
-### Do not use `/// script` inline metadata
+`sys.path.insert` and `os.environ.setdefault` both execute **before**
+`QgsApplication([], False)` — the only point at which Qt reads
+`QT_QPA_PLATFORM`. No wrapper script or pre-exported environment variables
+are required; the notebook is self-contained.
 
-marimo supports [PEP 723 inline script metadata](https://peps.python.org/pep-0723/):
+`setdefault` leaves `QT_QPA_PLATFORM` unchanged if it was already set — so
+notebooks launched from inside a live QGIS session (via the Processing Toolbox
+script in `processing/launch_marimo.py`) correctly inherit the real display
+platform rather than forcing `offscreen`.
+
+### PEP 723 inline script metadata
+
+All notebooks include a PEP 723 header listing their PyPI dependencies:
 
 ```python
 # /// script
-# dependencies = ["pandas", "pyqt6"]
+# requires-python = ">=3.13"
+# dependencies = [
+#     "marimo",
+#     "pandas",
+# ]
 # ///
 ```
 
-**Do not use this with QGIS notebooks.** When marimo sees this block it creates a
-fresh uv-managed environment that does not have `--system-site-packages`. It will
-install a bundled PyQt6 wheel with its own Qt6, which conflicts with the system QGIS
-Qt6 and produces:
+QGIS bindings are **not** listed — they ship with QGIS and are not on PyPI.
+The header is activated by `uv run notebook.py` (direct script execution);
+marimo itself ignores it. This means `uv run marimo edit notebook.py` and
+`uv run notebook.py` both work correctly without any special handling.
 
+### Locating data files
+
+Use `__file__` to locate data files relative to the notebook, not `os.getcwd()`.
+`os.getcwd()` reflects the launch directory, which varies depending on whether
+you started from the terminal, the QGIS Processing Toolbox, or a CI runner.
+`__file__` is always the notebook's own path:
+
+```python
+import os as _os
+_gpkg = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "data.gpkg")
 ```
-ImportError: libQt6Network.so.6: undefined symbol: _ZN14QObjectPrivateC2Ei,
-             version Qt_6_PRIVATE_API
-```
 
-Manage dependencies via the venv (`uv pip install`) instead.
+### Cell output
 
-### Cell return values
-
-marimo tracks data flow between cells through `return` statements. Everything a
-downstream cell needs must be explicitly returned:
+marimo renders the **last expression** of a cell as its visual output. Use the
+expression as the final statement and follow it with a bare `return`:
 
 ```python
 @app.cell
-def _(QgsVectorLayer):
-    layer = QgsVectorLayer("/path/to/data.gpkg", "name", "ogr")
-    assert layer.isValid()
-    return (layer,)   # other cells can now use `layer`
+def _(mo, total_m2):
+    mo.stat(value=f"{total_m2:,.1f} m²", label="Total area")
+    return
 ```
 
-### No `__file__` in cells
-
-`pathlib.Path(__file__)` raises `NameError` inside a cell — marimo wraps each cell
-in a function where `__file__` is not defined. Use absolute paths:
-
-```python
-# Bad
-data = pathlib.Path(__file__).parent / "data.gpkg"
-
-# Good
-data = "/home/user/project/data.gpkg"
-```
-
----
-
-## Why the wrapper?
-
-The `marimo-qgis` script sets three environment variables **before Python starts**:
-
-```bash
-export PYTHONPATH=/usr/share/qgis/python  # find PyQGIS
-export QT_QPA_PLATFORM=offscreen          # run Qt headlessly, no display needed
-export QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt6/plugins  # use system Qt6 plugins
-```
-
-In `marimo edit` mode, cells run in a **subprocess spawned with
-`multiprocessing.spawn`** — a fresh Python interpreter that inherits environment
-variables but not loaded libraries. Qt reads `QT_QPA_PLATFORM` at library-load time,
-before any cell code executes. Setting it inside a cell with
-`os.environ.setdefault(...)` is too late for the spawn process.
-
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for the full root-cause analysis and
-a debugging checklist.
+**Do not** use `return mo.stat(...)` — marimo's checker (`uvx marimo check`)
+flags this as an empty cell, and nothing is displayed.
 
 ---
 
@@ -188,17 +181,20 @@ a debugging checklist.
 
 ```
 marimo-qgis/
-├── marimo-qgis          # wrapper script (sets env vars, runs marimo)
-├── stations_analysis.py # example notebook: QGIS distance matrix + Pandas analysis
-├── qgis_test.py         # minimal notebook: confirms QGIS version
-├── stations.gpkg        # sample data: CWOP weather stations in Maine, USA
+├── stations_analysis.py          # QGIS distance matrix + Pandas analysis
+├── qgis_test.py                  # minimal: confirms QGIS version
+├── marimo_tutorial.py            # marimo feature tour (no QGIS dependency)
+├── stations.gpkg                 # sample data: CWOP weather stations, Maine
 ├── example/
-│   ├── example.gpkg     # Youngstown NY area: 9-layer GeoPackage, EPSG:26918
-│   ├── gpkg_summary.py  # example notebook: layer inventory, population trends, road length
-│   └── INSTRUCTIONS.md  # quick start for this example
-├── pyproject.toml       # project metadata and dependencies
-├── TROUBLESHOOTING.md   # debugging guide for marimo + QGIS integration issues
-└── MARIMO_QGIS.md       # additional setup notes
+│   ├── example.gpkg              # Youngstown NY area: 20-layer GeoPackage
+│   ├── gpkg_summary.py           # layer inventory, population trends, road length
+│   ├── simple_marimo_qgis.py     # minimal QGIS+marimo demo, extensively commented
+│   └── INSTRUCTIONS.md           # quick start for this example
+├── processing/
+│   └── launch_marimo.py          # QGIS Processing Toolbox script
+├── pyproject.toml                # project metadata and dependencies
+├── TROUBLESHOOTING.md            # debugging guide
+└── MARIMO_QGIS.md                # additional setup notes
 ```
 
 ---
@@ -211,16 +207,107 @@ marimo-qgis/
 | Windows | Not yet documented |
 | macOS | Not yet documented |
 
-On Windows and macOS the main challenges are:
+### What transfers to all platforms
 
-- **PyQGIS path**: the QGIS Python bindings are in a different location (often inside
-  the QGIS application bundle).
-- **Qt6 conflict**: QGIS ships its own Qt6 on those platforms; ensuring Python finds
-  QGIS's Qt6 rather than a PyPI-installed one requires setting `PATH` and
-  `QT_PLUGIN_PATH` correctly in the launcher.
+The following aspects of this approach are fully platform-independent:
 
-If you get it working on Windows or macOS, a pull request adding a platform-specific
-wrapper script and notes to TROUBLESHOOTING.md would be very welcome.
+- `os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")` — Qt ships the offscreen
+  platform on Windows and macOS too
+- `__file__`-based data paths — portable Python
+- PEP 723 headers, marimo cell patterns, `uvx marimo check`
+- `processing/launch_marimo.py` — `subprocess.Popen` with `start_new_session=True`
+  works on all platforms
+
+### Why Linux is simpler
+
+On Linux, QGIS is installed via the system package manager (apt). PyQt6 lands in the
+system Python packages (`/usr/lib/python3/dist-packages/PyQt6/`), so a venv created
+with `--system-site-packages` inherits it automatically. The bindings are at a stable,
+well-known path (`/usr/share/qgis/python`).
+
+On Windows and macOS, **QGIS bundles its own Python, Qt6, and PyQt6 inside the
+application**. There is no system PyQt6 to inherit, and `--system-site-packages` does
+not help.
+
+### Windows
+
+QGIS on Windows is typically installed via the OSGeo4W installer. The PyQGIS bindings
+and Qt6 DLLs live inside that installation:
+
+| Item | Typical path |
+|------|-------------|
+| Python bindings | `C:\Program Files\QGIS 4.x\apps\qgis\python` |
+| Qt6 plugins | `C:\Program Files\QGIS 4.x\apps\qt6\plugins` |
+| Python interpreter | `C:\Program Files\QGIS 4.x\apps\Python313\python.exe` |
+
+Two viable approaches:
+
+**Option A — Use QGIS's bundled Python directly.** Avoids all Qt6 conflicts because
+you are using the exact Python and Qt6 that QGIS itself uses:
+```bat
+"C:\Program Files\QGIS 4.x\apps\Python313\python.exe" -m pip install marimo pandas
+"C:\Program Files\QGIS 4.x\apps\Python313\python.exe" -m marimo edit notebook.py
+```
+
+**Option B — Use a separate Python, adapt the init cell.** Add both `sys.path` and
+`QT_PLUGIN_PATH` before `QgsApplication` is created:
+```python
+sys.path.insert(0, r"C:\Program Files\QGIS 4.x\apps\qgis\python")
+os.environ.setdefault("QT_PLUGIN_PATH", r"C:\Program Files\QGIS 4.x\apps\qt6\plugins")
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+```
+Getting a separate Python venv to find QGIS's Qt6 DLLs (not a PyPI-installed copy)
+is the main difficulty on this path.
+
+### macOS
+
+QGIS on macOS ships as `QGIS.app`. The bundle contains its own Python and Qt6:
+
+| Item | Path |
+|------|------|
+| Python bindings | `/Applications/QGIS.app/Contents/Resources/python/` |
+| Qt6 plugins | `/Applications/QGIS.app/Contents/MacOS/plugins/` |
+| Python interpreter | `/Applications/QGIS.app/Contents/MacOS/bin/python3` |
+
+**Option A — Use QGIS's bundled Python directly:**
+```bash
+/Applications/QGIS.app/Contents/MacOS/bin/python3 -m pip install marimo pandas
+/Applications/QGIS.app/Contents/MacOS/bin/python3 -m marimo edit notebook.py
+```
+
+**Option B — Use a separate Python, adapt the init cell:**
+```python
+sys.path.insert(0, "/Applications/QGIS.app/Contents/Resources/python")
+os.environ.setdefault("QT_PLUGIN_PATH", "/Applications/QGIS.app/Contents/MacOS/plugins")
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+```
+
+### Cross-platform init cell pattern
+
+If you want notebooks that work on all three platforms, detect the OS in the init cell:
+
+```python
+import sys, os
+
+if sys.platform == "win32":
+    sys.path.insert(0, r"C:\Program Files\QGIS 4.x\apps\qgis\python")
+    os.environ.setdefault("QT_PLUGIN_PATH", r"C:\Program Files\QGIS 4.x\apps\qt6\plugins")
+elif sys.platform == "darwin":
+    sys.path.insert(0, "/Applications/QGIS.app/Contents/Resources/python")
+    os.environ.setdefault("QT_PLUGIN_PATH", "/Applications/QGIS.app/Contents/MacOS/plugins")
+else:  # Linux
+    sys.path.insert(0, "/usr/share/qgis/python")
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+```
+
+`QT_PLUGIN_PATH` is not needed on Linux because Qt finds the system plugins
+automatically. On Windows and macOS it is required so Qt locates the platform plugin
+(`qoffscreen`) inside QGIS's bundle rather than looking in a non-existent system
+location.
+
+If you get it working on Windows or macOS, a pull request adding platform-specific
+notes to TROUBLESHOOTING.md would be very welcome.
 
 ---
 
@@ -229,7 +316,7 @@ wrapper script and notes to TROUBLESHOOTING.md would be very welcome.
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for documented issues including:
 
 - `ImportError: libQt6Network.so.6: undefined symbol` — the most common error, caused
-  by a PyQt6 version conflict
+  by a PyQt6 version conflict (venv missing `--system-site-packages`)
 - Cells showing no output in `marimo edit` — stale session cache
 - uv using the wrong Python version
 
