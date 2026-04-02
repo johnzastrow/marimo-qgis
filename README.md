@@ -5,6 +5,17 @@ Run [marimo](https://marimo.io) reactive notebooks with
 
  This is a proof-of-concept and reference implementation for using marimo with QGIS spatial. The examples *workish* on Linux, but it's a little finicky to set up and not yet tested on Windows or macOS. See Platform Support below and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for debugging tips, and contributions to improve cross-platform support are very welcome.
 
+## Version compatibility
+
+| Component | Version |
+|-----------|---------|
+| QGIS | 4.0.0-Norrköping (tested); minimum 4.0 required |
+| marimo | 0.21.1 (tested); any recent release should work |
+| Python | 3.13 (tested with `uv venv --python 3.13`) |
+| Platform | Linux (Ubuntu, QGIS apt repo) — tested and working |
+
+The QGIS plugin (`plugin/`) declares `qgisMinimumVersion=4.0` in `metadata.txt`. It has not been tested against QGIS 3.x; the 4.x PyQGIS API is assumed throughout.
+
 **Videos about Marimo**
 * [Marimo Overview](https://youtu.be/3N6lInzq5MI?si=l6BnT-hA2vuTkPgV)
 * [All Marimo Videos](https://www.youtube.com/@marimo-team/videos)
