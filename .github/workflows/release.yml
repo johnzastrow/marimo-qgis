@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build plugin ZIP
+        run: make package
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: marimo_launcher.zip
+          generate_release_notes: true
