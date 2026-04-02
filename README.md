@@ -13,6 +13,38 @@ This repository contains working notebooks and a setup guide for the combination
 - **Pandas** tabular analysis
 - **marimo** reactive, browser-based Python notebooks
 
+## What's in this repo
+
+### Notebooks (`.py` files)
+
+marimo notebooks are plain Python files — not JSON, not `.ipynb`. Each cell is
+a decorated function; marimo reads the function signatures to build a dependency
+graph and re-runs only the cells whose inputs changed. Because they're plain
+Python, they diff cleanly in git and run equally well as scripts or in the
+browser.
+
+| File | What it does |
+|------|-------------|
+| `example/simple_marimo_qgis.py` | Minimal QGIS + marimo demo — best starting point, extensively commented |
+| `example/gpkg_summary.py` | Full GeoPackage inventory, population trends, road network length |
+| `example/processing_demo.py` | QGIS Processing algorithms — reactive buffer/dissolve, parameter inspector, capabilities reference |
+| `stations_analysis.py` | Geodesic distance matrix between weather stations, Pandas nearest-neighbour analysis |
+| `qgis_test.py` | Smoke test — confirms QGIS version and Python bindings |
+| `marimo_tutorial.py` | marimo feature tour with no QGIS dependency (UI elements, exports, reactivity) |
+
+### Sample data (`.gpkg` files)
+
+[GeoPackage](https://www.geopackage.org/) is an open, SQLite-based format that
+stores vector layers, attributes, and metadata in a single file — no shapefile
+sidecar files, no proprietary format. QGIS reads and writes it natively.
+
+| File | Contents |
+|------|----------|
+| `example/example.gpkg` | 20 layers covering Youngstown, NY: buildings, streets, culverts, hydrology, land cover, parcels, population boundaries — three CRS (EPSG:26918, 4269, 4326) |
+| `stations.gpkg` | CWOP weather station locations in Maine, USA (points, EPSG:4326) |
+
+---
+
 ## Example notebooks
 
 `example/simple_marimo_qgis.py` is the recommended starting point — a minimal,
