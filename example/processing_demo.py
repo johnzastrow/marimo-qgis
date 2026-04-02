@@ -371,29 +371,29 @@ def _(alg_selector, mo):
 @app.cell
 def _(mo):
     mo.md("""
-## marimo + QGIS capabilities reference
+    ## marimo + QGIS capabilities reference
 
-The table below maps QGIS API capabilities to the marimo elements that
-present their results.  Everything in the QGIS column runs headlessly —
-no display, no QGIS desktop process required.
+    The table below maps QGIS API capabilities to the marimo elements that
+    present their results.  Everything in the QGIS column runs headlessly —
+    no display, no QGIS desktop process required.
 
-| Capability | QGIS API | marimo element |
-|---|---|---|
-| **Open vector data** | `QgsVectorLayer(uri, name, "ogr")` for GeoPackage, Shapefile, PostGIS, WFS | `mo.ui.table` on the resulting DataFrame |
-| **Open raster data** | `QgsRasterLayer(path, name)` — GeoTIFF, NetCDF, WMS | `mo.image` with a rendered PNG |
-| **Enumerate layers** | `QgsProviderRegistry.instance().querySublayers(path)` | `mo.ui.table` for layer inventory |
-| **Iterate features** | `layer.getFeatures()` — lazy generator, one feature at a time | Convert to `pd.DataFrame`, then `mo.ui.table` |
-| **Attribute filter** | `QgsFeatureRequest().setFilterExpression('"field" > 0')` | Drive the expression from `mo.ui.slider` or `mo.ui.text` |
-| **Spatial filter** | `QgsFeatureRequest().setFilterRect(QgsRectangle(...))` | Extent from a bounding-box widget or upstream layer |
-| **Spatial index** | `QgsSpatialIndex(layer.getFeatures())` — fast nearest-neighbour and intersect queries | Feed results into Pandas for ranking/display |
-| **Geodesic measurement** | `QgsDistanceArea` — area, length, distance on WGS84 ellipsoid | `mo.stat` for scalar results, `mo.ui.table` for per-feature tables |
-| **Coordinate transform** | `QgsCoordinateTransform(src_crs, dst_crs, QgsProject.instance())` | Transparent — reproject before measuring or displaying |
-| **300+ Processing algorithms** | `processing.run("native:buffer", {...})` — buffer, dissolve, clip, reproject, join, raster analysis, … | `mo.stat`, `mo.ui.table`, or `mo.image` depending on output type |
-| **Processing models** | `QgsProcessingModelAlgorithm().fromFile("model.model3")` — chains of algorithms built in the Model Designer | Same as single algorithms — result dict keyed by output name |
-| **QGIS expressions** | `QgsExpression("\"area\" > 1000")` — the same expression language used in QGIS desktop | Parameterise the expression string from `mo.ui.text` or `mo.ui.slider` |
-| **Map rendering** | `QgsMapRendererSequentialJob(settings)` — renders any combination of layers to a `QImage` | `mo.image(png_bytes)` — embed the rendered map directly in the notebook |
-| **Reactivity** | Any QGIS computation that returns Python scalars or layers | Any `mo.ui.*` widget — change a slider, QGIS re-runs automatically |
-| **Publication** | `uv run marimo export html --no-include-code notebook.py` | Self-contained HTML report with outputs only, no code visible |
+    | Capability | QGIS API | marimo element |
+    |---|---|---|
+    | **Open vector data** | `QgsVectorLayer(uri, name, "ogr")` for GeoPackage, Shapefile, PostGIS, WFS | `mo.ui.table` on the resulting DataFrame |
+    | **Open raster data** | `QgsRasterLayer(path, name)` — GeoTIFF, NetCDF, WMS | `mo.image` with a rendered PNG |
+    | **Enumerate layers** | `QgsProviderRegistry.instance().querySublayers(path)` | `mo.ui.table` for layer inventory |
+    | **Iterate features** | `layer.getFeatures()` — lazy generator, one feature at a time | Convert to `pd.DataFrame`, then `mo.ui.table` |
+    | **Attribute filter** | `QgsFeatureRequest().setFilterExpression('"field" > 0')` | Drive the expression from `mo.ui.slider` or `mo.ui.text` |
+    | **Spatial filter** | `QgsFeatureRequest().setFilterRect(QgsRectangle(...))` | Extent from a bounding-box widget or upstream layer |
+    | **Spatial index** | `QgsSpatialIndex(layer.getFeatures())` — fast nearest-neighbour and intersect queries | Feed results into Pandas for ranking/display |
+    | **Geodesic measurement** | `QgsDistanceArea` — area, length, distance on WGS84 ellipsoid | `mo.stat` for scalar results, `mo.ui.table` for per-feature tables |
+    | **Coordinate transform** | `QgsCoordinateTransform(src_crs, dst_crs, QgsProject.instance())` | Transparent — reproject before measuring or displaying |
+    | **300+ Processing algorithms** | `processing.run("native:buffer", {...})` — buffer, dissolve, clip, reproject, join, raster analysis, … | `mo.stat`, `mo.ui.table`, or `mo.image` depending on output type |
+    | **Processing models** | `QgsProcessingModelAlgorithm().fromFile("model.model3")` — chains of algorithms built in the Model Designer | Same as single algorithms — result dict keyed by output name |
+    | **QGIS expressions** | `QgsExpression("\"area" > 1000")` — the same expression language used in QGIS desktop | Parameterise the expression string from `mo.ui.text` or `mo.ui.slider` |
+    | **Map rendering** | `QgsMapRendererSequentialJob(settings)` — renders any combination of layers to a `QImage` | `mo.image(png_bytes)` — embed the rendered map directly in the notebook |
+    | **Reactivity** | Any QGIS computation that returns Python scalars or layers | Any `mo.ui.*` widget — change a slider, QGIS re-runs automatically |
+    | **Publication** | `uv run marimo export html --no-include-code notebook.py` | Self-contained HTML report with outputs only, no code visible |
     """)
     return
 

@@ -2,6 +2,11 @@
 
 Run [marimo](https://marimo.io) reactive notebooks with full [QGIS 4 / PyQGIS](https://qgis.org) support on Linux.
 
+**Videos about Marimo**
+* [Marimo Overview](https://youtu.be/3N6lInzq5MI?si=l6BnT-hA2vuTkPgV)
+* [All Marimo Videos](https://www.youtube.com/@marimo-team/videos)
+* [Marimo + Quarto for publications](https://youtu.be/scuGmtv81S0?si=qVcCK49GMDqqOH8k)
+
 This repository contains working notebooks and a setup guide for the combination of:
 
 - **QGIS 4** spatial operations (vector layers, geodesic distance, coordinate reference systems)
