@@ -220,19 +220,31 @@ flags this as an empty cell, and nothing is displayed.
 
 `plugin/` is a full QGIS plugin that registers the marimo launcher in the
 Processing Toolbox automatically — no manual "Add Script" step needed.
+The algorithm appears under **marimo ▸ Launch marimo notebook**.
 
-### Install (Linux)
+### Install from ZIP (recommended)
+
+Download `marimo_launcher.zip` from the [latest release](https://github.com/johnzastrow/marimo-qgis/releases/latest),
+then in QGIS:
+
+**Plugins ▸ Manage and Install Plugins ▸ Install from ZIP**
+
+### Install from source (development)
 
 ```bash
-# Symlink the plugin folder into QGIS's plugin directory.
+# Clone the repo then symlink plugin/ into the QGIS plugins directory.
 # The symlink name (marimo_launcher) becomes the Python package name.
 ln -s /path/to/marimo_qgis/plugin \
       ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/marimo_launcher
 ```
 
-Then in QGIS: **Plugins ▸ Manage and Install Plugins ▸ Installed** — enable
-**marimo Launcher**. The algorithm appears under **marimo ▸ Launch marimo
-notebook** in the Processing Toolbox.
+Then: **Plugins ▸ Manage and Install Plugins ▸ Installed** — enable **marimo Launcher**.
+
+### Build the ZIP yourself
+
+```bash
+make package   # → marimo_launcher.zip
+```
 
 ### How it works
 
