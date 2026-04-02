@@ -1,6 +1,9 @@
 # marimo-qgis
 
-Run [marimo](https://marimo.io) reactive notebooks with full [QGIS 4 / PyQGIS](https://qgis.org) support on Linux.
+Run [marimo](https://marimo.io) reactive notebooks with 
+ [QGIS 4 / PyQGIS](https://qgis.org) support on Linux.
+
+ This is a proof-of-concept and reference implementation for using marimo with QGIS spatial. The examples *workish* on Linux, but it's a little finicky to set up and not yet tested on Windows or macOS. See Platform Support below and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for debugging tips, and contributions to improve cross-platform support are very welcome.
 
 **Videos about Marimo**
 * [Marimo Overview](https://youtu.be/3N6lInzq5MI?si=l6BnT-hA2vuTkPgV)
@@ -213,6 +216,38 @@ flags this as an empty cell, and nothing is displayed.
 
 ---
 
+## QGIS plugin
+
+`plugin/` is a full QGIS plugin that registers the marimo launcher in the
+Processing Toolbox automatically — no manual "Add Script" step needed.
+
+### Install (Linux)
+
+```bash
+# Symlink the plugin folder into QGIS's plugin directory.
+# The symlink name (marimo_launcher) becomes the Python package name.
+ln -s /path/to/marimo_qgis/plugin \
+      ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/marimo_launcher
+```
+
+Then in QGIS: **Plugins ▸ Manage and Install Plugins ▸ Installed** — enable
+**marimo Launcher**. The algorithm appears under **marimo ▸ Launch marimo
+notebook** in the Processing Toolbox.
+
+### How it works
+
+| File | Role |
+|------|------|
+| `plugin/__init__.py` | `classFactory()` entry point — QGIS loads this first |
+| `plugin/plugin.py` | `MarimoLauncherPlugin` — registers the provider on startup, removes it on unload |
+| `plugin/provider.py` | `MarimoProvider` — groups algorithms under the "marimo" Toolbox heading |
+| `plugin/algorithm.py` | `LaunchMarimoAlgorithm` — the launch logic (notebook path, mode, working dir) |
+
+The `processing/launch_marimo.py` standalone script remains available for
+manual addition to the Toolbox without installing the plugin.
+
+---
+
 ## Project structure
 
 ```
@@ -225,9 +260,16 @@ marimo-qgis/
 │   ├── example.gpkg              # Youngstown NY area: 20-layer GeoPackage
 │   ├── gpkg_summary.py           # layer inventory, population trends, road length
 │   ├── simple_marimo_qgis.py     # minimal QGIS+marimo demo, extensively commented
+│   ├── processing_demo.py        # Processing algorithms, parameter inspector
 │   └── INSTRUCTIONS.md           # quick start for this example
+├── plugin/                       # QGIS plugin (auto-registers in Toolbox)
+│   ├── __init__.py               # classFactory() entry point
+│   ├── metadata.txt              # plugin name, version, QGIS minimum version
+│   ├── plugin.py                 # plugin class — registers/removes provider
+│   ├── provider.py               # Processing provider — "marimo" Toolbox group
+│   └── algorithm.py              # LaunchMarimoAlgorithm
 ├── processing/
-│   └── launch_marimo.py          # QGIS Processing Toolbox script
+│   └── launch_marimo.py          # standalone Processing script (no plugin needed)
 ├── pyproject.toml                # project metadata and dependencies
 ├── TROUBLESHOOTING.md            # debugging guide
 └── MARIMO_QGIS.md                # additional setup notes

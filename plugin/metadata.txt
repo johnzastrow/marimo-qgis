@@ -1,0 +1,25 @@
+[general]
+name=marimo Launcher
+qgisMinimumVersion=4.0
+qgisMaximumVersion=4.99
+description=Launch marimo reactive notebooks from QGIS with full PyQGIS support
+version=0.1.0
+author=John Zastrow
+email=
+about=Adds a "marimo" group to the Processing Toolbox with a "Launch marimo notebook"
+    algorithm. Select any marimo notebook (.py file), choose edit or run mode, and the
+    notebook opens in your browser as a detached subprocess with full access to QGIS
+    Python APIs (qgis.core, qgis.analysis, processing, etc.).
+
+    Requires uv (https://docs.astral.sh/uv/) on PATH and a project virtualenv created
+    with --system-site-packages so the notebook kernel can import PyQt6.
+
+tracker=https://github.com/johnzastrow/marimo-qgis/issues
+repository=https://github.com/johnzastrow/marimo-qgis
+tags=marimo,notebook,python,analysis,processing,reactive
+homepage=https://github.com/johnzastrow/marimo-qgis
+category=Analysis
+icon=
+experimental=True
+deprecated=False
+hasProcessingProvider=yes

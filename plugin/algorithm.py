@@ -1,18 +1,3 @@
-"""
-Launch marimo Notebook — standalone QGIS Processing Script
-
-This is the standalone version of the algorithm.  For automatic registration
-without manually adding it to the Toolbox, use the full plugin instead:
-
-  plugin/   ←  symlink to ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/marimo_launcher
-              then enable via Plugins ▸ Manage and Install Plugins
-
-To use this standalone script:
-  Processing Toolbox ▸ Scripts (⚙) ▸ Add Script to Toolbox… ▸ select this file
-
-The algorithm will appear under  marimo ▸ Launch marimo notebook.
-"""
-
 from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingOutputString,
@@ -23,6 +8,15 @@ from qgis.core import (
 
 
 class LaunchMarimoAlgorithm(QgsProcessingAlgorithm):
+    """
+    Processing algorithm that launches a marimo notebook as a detached
+    subprocess with the QGIS environment available.
+
+    The notebook opens in the user's browser.  It runs in its own Python
+    process with access to qgis.core, qgis.analysis, and the processing
+    module — but does not share state with the running QGIS instance.
+    Each notebook initialises its own QgsApplication.
+    """
 
     NOTEBOOK    = "NOTEBOOK"
     MODE        = "MODE"
@@ -54,10 +48,11 @@ class LaunchMarimoAlgorithm(QgsProcessingAlgorithm):
             "available (qgis.core, qgis.analysis, etc.). It does not share "
             "state with the running QGIS instance — each notebook initialises "
             "its own QgsApplication.\n\n"
-            "Working directory controls relative paths inside the notebook "
-            "(e.g. paths built with os.getcwd()). Defaults to the QGIS "
-            "project home folder, or the notebook's own directory if no "
-            "project is open."
+            "Working directory controls relative paths inside the notebook. "
+            "Defaults to the QGIS project home folder, or the notebook's own "
+            "directory if no project is open.\n\n"
+            "Requires: uv on PATH (https://docs.astral.sh/uv/) and a project "
+            "virtualenv created with --system-site-packages."
         )
 
     # ------------------------------------------------------------ parameters
@@ -113,14 +108,14 @@ class LaunchMarimoAlgorithm(QgsProcessingAlgorithm):
         # PYTHONPATH: defence-in-depth.  Notebooks self-configure via
         #   sys.path.insert(0, "/usr/share/qgis/python")
         # inside their QGIS init cell, so they do not depend on this variable.
-        # Setting it here ensures the marimo *server* process also finds the
+        # Setting it here ensures the marimo server process also finds the
         # bindings if it needs them before the first cell runs.
         #
-        # QT_QPA_PLATFORM: do NOT inherit any "offscreen" value from the QGIS
-        # process — the subprocess has a real display and needs a real platform.
-        # Notebooks use os.environ.setdefault("QT_QPA_PLATFORM", "offscreen"),
-        # so if this env var is absent they fall back to offscreen themselves;
-        # if we leave it unset here they will correctly detect the live display.
+        # QT_QPA_PLATFORM: do NOT forward any "offscreen" value from the QGIS
+        # process.  The subprocess has a real display and needs a real platform
+        # plugin.  Notebooks use os.environ.setdefault("QT_QPA_PLATFORM",
+        # "offscreen"), so if the variable is absent they fall back to offscreen
+        # themselves; leaving it unset here lets them detect the live display.
         env = os.environ.copy()
         env["PYTHONPATH"] = "/usr/share/qgis/python"
         env.pop("QT_QPA_PLATFORM", None)
