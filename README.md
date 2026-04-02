@@ -129,24 +129,23 @@ notebooks launched from inside a live QGIS session (via the Processing Toolbox
 script in `processing/launch_marimo.py`) correctly inherit the real display
 platform rather than forcing `offscreen`.
 
-### PEP 723 inline script metadata
+### Do not use PEP 723 inline script metadata in QGIS notebooks
 
-All notebooks include a PEP 723 header listing their PyPI dependencies:
+When marimo is launched via `uv run`, it detects any `# /// script` block and
+**auto-sandboxes** the notebook kernel — creating a fresh isolated environment
+without `--system-site-packages`. That environment has no PyQt6, so every
+`from qgis.core import ...` fails with `ModuleNotFoundError: No module named 'PyQt6'`.
 
-```python
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#     "marimo",
-#     "pandas",
-# ]
-# ///
+**Do not add** `# /// script` blocks to QGIS notebooks. Manage dependencies
+via the project venv instead:
+
+```bash
+uv venv --python 3.13 --system-site-packages
+uv pip install marimo pandas numpy
 ```
 
-QGIS bindings are **not** listed — they ship with QGIS and are not on PyPI.
-The header is activated by `uv run notebook.py` (direct script execution);
-marimo itself ignores it. This means `uv run marimo edit notebook.py` and
-`uv run notebook.py` both work correctly without any special handling.
+PEP 723 headers are safe in notebooks with **no QGIS dependency** (e.g.
+`marimo_tutorial.py`), where the isolated environment has everything it needs.
 
 ### Locating data files
 

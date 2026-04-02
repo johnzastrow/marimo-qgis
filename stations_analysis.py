@@ -1,15 +1,11 @@
-# /// script
-# requires-python = ">=3.13"
-# dependencies = [
-#     "marimo",
-#     "pandas",
-#     "numpy",
-# ]
-# ///
-#
-# QGIS bindings (qgis.core) are NOT listed above because they ship with the
-# QGIS application and are not available on PyPI.  They are added to sys.path
-# at runtime inside the QGIS init cell below.
+# DO NOT add a PEP 723 `# /// script` block to QGIS notebooks.
+# When marimo is launched via `uv run`, it auto-sandboxes any notebook that
+# has inline script metadata, creating a fresh isolated environment without
+# --system-site-packages.  That environment has no PyQt6, so every
+# `from qgis.core import ...` fails with ModuleNotFoundError.
+# Manage dependencies via the project venv instead:
+#   uv venv --python 3.13 --system-site-packages
+#   uv pip install marimo pandas numpy
 #
 # Run with:  uv run marimo edit stations_analysis.py
 #            uv run marimo run  stations_analysis.py

@@ -79,16 +79,12 @@ def _(mo):
 - `__file__` works inside cells — use it for reliable relative paths to data files
 - Run `uvx marimo check notebook.py` before handing back to the user
 
-## PEP 723 Inline Script Metadata
+## PEP 723 Inline Script Metadata — Do NOT use in QGIS notebooks
 
-All notebooks include a PEP 723 header listing their PyPI dependencies:
+When marimo is launched via `uv run`, it detects any `# /// script` block and
+auto-sandboxes the kernel in a fresh isolated environment without
+`--system-site-packages`. That environment has no PyQt6, causing:
+`ModuleNotFoundError: No module named 'PyQt6'`
 
-```python
-# /// script
-# requires-python = ">=3.13"
-# dependencies = ["marimo", "pandas"]
-# ///
-```
-
-QGIS bindings are NOT listed (not on PyPI). The header is used by
-`uv run notebook.py` for direct script execution; marimo itself ignores it.
+QGIS notebooks carry a comment at the top explaining this instead of a header.
+PEP 723 headers are only safe in notebooks with no QGIS dependency (e.g. `marimo_tutorial.py`).
