@@ -7,10 +7,14 @@ A project for running [marimo](https://marimo.io) notebooks with QGIS4 (PyQGIS) 
 ## Environment
 
 - QGIS4 at `/usr/bin/qgis`, Python bindings at `/usr/share/qgis/python`
-- QGIS version: 4.0.0-Norrköping
-- Python 3.13.7 (system), marimo 0.21.1
+- QGIS version: 4.0.3-Norrköping
+- Python 3.14.4 (system), marimo 0.23.9
 - uv for package management
-- `.venv` created with `--system-site-packages` (required for system PyQt6)
+- `.venv` created from the system interpreter with `--system-site-packages`:
+  `uv venv --python /usr/bin/python3.14 --system-site-packages` (the explicit
+  `/usr/bin` path is required so the venv inherits the system PyQt6 at
+  `/usr/lib/python3/dist-packages`; the version must match QGIS's compiled
+  bindings — 3.14 here)
 
 ## Running Notebooks
 

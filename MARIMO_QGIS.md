@@ -11,13 +11,28 @@ This project provides marimo notebooks that leverage QGIS4 (PyQGIS) libraries.
 
 ```bash
 cd /home/jcz/Github/marimo_qgis
-uv venv --python 3.13.7 --system-site-packages
+uv venv --python /usr/bin/python3.14 --system-site-packages
 uv pip install marimo pandas numpy matplotlib
 ```
 
 `--system-site-packages` is required so the venv finds the **system** PyQt6
 that ships with QGIS. Without it, uv installs a bundled PyQt6 wheel whose Qt6
 version conflicts with the system QGIS Qt6 and causes an `ImportError` at runtime.
+
+Two things matter here, both learned the hard way:
+
+- **Pass the explicit system interpreter path** (`/usr/bin/python3.14`), not a
+  bare version like `3.14`. A bare version lets uv use one of its own downloaded
+  standalone CPython builds, whose "system site-packages" is the standalone
+  build's own — *not* `/usr/lib/python3/dist-packages` where the OS PyQt6 lives.
+  Pointing at `/usr/bin/python3.14` forces the OS interpreter, so
+  `--system-site-packages` actually reaches the system PyQt6.
+- **The venv Python must match the version QGIS's bindings are compiled for.**
+  QGIS ships a compiled `qgis/_core.so` built against one Python ABI; a venv on
+  any other minor version cannot import it. On this machine QGIS 4.0.3 is built
+  against Python 3.14, and the system PyQt6 is installed only for 3.14 — so the
+  venv must be 3.14. (The previous 3.13.7 instructions broke after the OS
+  upgraded to Python 3.14, with `ModuleNotFoundError: No module named 'PyQt6'`.)
 
 ## Running Notebooks
 
@@ -78,7 +93,8 @@ Key points:
 ## Notes
 
 - QGIS Python bindings are located at `/usr/share/qgis/python`
-- System Python 3.13 is required (at `/usr/bin/python3`)
+- System Python 3.14 is required (at `/usr/bin/python3.14`) — it must match the
+  Python version QGIS's compiled bindings were built against
 - The venv must use `--system-site-packages` to access system PyQt6
 - LSP will show errors for `qgis` imports — these can be ignored as long as
   runtime works
