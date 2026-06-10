@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `stations_analysis.py` — a marimo notebook that loads `stations.gpkg` via PyQGIS, computes a full geodesic distance matrix with `QgsDistanceArea`, and analyses it with Pandas, with rich Markdown explanations in every cell.
+**Goal:** Build `notebooks/stations_analysis.py` — a marimo notebook that loads `stations.gpkg` via PyQGIS, computes a full geodesic distance matrix with `QgsDistanceArea`, and analyses it with Pandas, with rich Markdown explanations in every cell.
 
 **Architecture:** One marimo notebook file with 12 cells in strict dependency order: `setup → qgis_init → load_layer → to_dataframe → dist_matrix → analysis`, each preceded by a prose `mo.md()` cell. PyQGIS owns all spatial computation; Pandas owns all tabular analysis. The cell boundary between `dist_matrix` and `analysis` is intentionally clean to allow a future QGIS Processing Toolbox step to replace `dist_matrix` without touching anything else.
 
@@ -14,7 +14,7 @@
 
 | Action | Path | Responsibility |
 |--------|------|----------------|
-| Create | `stations_analysis.py` | The complete notebook |
+| Create | `notebooks/stations_analysis.py` | The complete notebook |
 | Modify | `pyproject.toml` | Add `pandas` and `numpy` to dependencies |
 
 The `marimo-qgis` wrapper script already sets `PYTHONPATH=/usr/share/qgis/python` and is how the notebook is launched.
@@ -24,7 +24,7 @@ The `marimo-qgis` wrapper script already sets `PYTHONPATH=/usr/share/qgis/python
 ## Verification command (used after every task)
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -83,11 +83,11 @@ git commit -m "feat: add pandas and numpy dependencies"
 ## Task 2: Create notebook scaffold (setup + qgis_init cells)
 
 **Files:**
-- Create: `stations_analysis.py`
+- Create: `notebooks/stations_analysis.py`
 
 - [ ] **Step 1: Create the file with PEP 723 header, setup cell, and qgis_init cell**
 
-Write `stations_analysis.py` with the following content exactly:
+Write `notebooks/stations_analysis.py` with the following content exactly:
 
 ```python
 # /// script
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Run lint check**
 
 ```bash
-uv run marimo check stations_analysis.py
+uv run marimo check notebooks/stations_analysis.py
 ```
 
 Expected: 0 errors (warnings about markdown indentation are acceptable).
@@ -197,7 +197,7 @@ Expected: 0 errors (warnings about markdown indentation are acceptable).
 - [ ] **Step 3: Verify scaffold executes**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -220,7 +220,7 @@ Expected: `True ← QGIS version in output`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add stations_analysis.py
+git add notebooks/stations_analysis.py
 git commit -m "feat: add stations_analysis scaffold with QGIS init"
 ```
 
@@ -229,7 +229,7 @@ git commit -m "feat: add stations_analysis scaffold with QGIS init"
 ## Task 3: Load stations layer
 
 **Files:**
-- Modify: `stations_analysis.py` — add prose cell + `load_layer` cell before `if __name__`
+- Modify: `notebooks/stations_analysis.py` — add prose cell + `load_layer` cell before `if __name__`
 
 - [ ] **Step 1: Add the prose cell**
 
@@ -261,7 +261,7 @@ so this check is essential.
 def _(QgsVectorLayer):
     # Use a hardcoded absolute path — pathlib.Path(__file__) raises NameError
     # inside a marimo cell function because __file__ is not in the cell's local scope.
-    _gpkg = "/home/jcz/Github/marimo_qgis/stations.gpkg"
+    _gpkg = "/home/jcz/Github/marimo_qgis/notebooks/stations.gpkg"
     layer = QgsVectorLayer(_gpkg, "stations", "ogr")
 
     assert layer.isValid(), f"Layer failed to load from {_gpkg}"
@@ -272,13 +272,13 @@ def _(QgsVectorLayer):
 - [ ] **Step 2: Run lint check**
 
 ```bash
-uv run marimo check stations_analysis.py
+uv run marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 3: Verify layer loads**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -287,7 +287,7 @@ Expected: `Exit: 0`
 - [ ] **Step 4: Commit**
 
 ```bash
-git add stations_analysis.py
+git add notebooks/stations_analysis.py
 git commit -m "feat: add load_layer cell — opens stations.gpkg via QgsVectorLayer"
 ```
 
@@ -296,7 +296,7 @@ git commit -m "feat: add load_layer cell — opens stations.gpkg via QgsVectorLa
 ## Task 4: Convert layer to Pandas DataFrame
 
 **Files:**
-- Modify: `stations_analysis.py` — add prose cell + `to_dataframe` cell
+- Modify: `notebooks/stations_analysis.py` — add prose cell + `to_dataframe` cell
 
 - [ ] **Step 1: Add the prose cell**
 
@@ -354,13 +354,13 @@ def _(layer, mo):
 - [ ] **Step 3: Run lint check**
 
 ```bash
-uv run marimo check stations_analysis.py
+uv run marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 4: Verify table appears in export**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 python3 -c "
 with open('/tmp/sa_test.html') as f: c = f.read()
@@ -375,7 +375,7 @@ Expected: all three site IDs found as `True`.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add stations_analysis.py
+git add notebooks/stations_analysis.py
 git commit -m "feat: add to_dataframe cell — QgsFeature iterator → pandas DataFrame"
 ```
 
@@ -384,7 +384,7 @@ git commit -m "feat: add to_dataframe cell — QgsFeature iterator → pandas Da
 ## Task 5: Compute geodesic distance matrix
 
 **Files:**
-- Modify: `stations_analysis.py` — add prose cell + `dist_matrix` cell
+- Modify: `notebooks/stations_analysis.py` — add prose cell + `dist_matrix` cell
 
 This is the core PyQGIS integration cell. Read it carefully before implementing.
 
@@ -459,13 +459,13 @@ def _(QgsDistanceArea, QgsPointXY, QgsProject, df, layer, mo, pd):
 - [ ] **Step 3: Run lint check**
 
 ```bash
-uv run marimo check stations_analysis.py
+uv run marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 4: Verify matrix appears and values are plausible**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -493,7 +493,7 @@ Expected: a distance in the 15–25 km range (these are nearby Maine stations).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add stations_analysis.py
+git add notebooks/stations_analysis.py
 git commit -m "feat: add dist_matrix cell — QgsDistanceArea geodesic N×N km matrix"
 ```
 
@@ -502,7 +502,7 @@ git commit -m "feat: add dist_matrix cell — QgsDistanceArea geodesic N×N km m
 ## Task 6: Pandas analysis and summary display
 
 **Files:**
-- Modify: `stations_analysis.py` — add prose cell + `analysis` cell
+- Modify: `notebooks/stations_analysis.py` — add prose cell + `analysis` cell
 
 - [ ] **Step 1: Add the prose cell**
 
@@ -586,13 +586,13 @@ def _(dist_df, mo, pd):
 - [ ] **Step 3: Run lint check**
 
 ```bash
-uv run marimo check stations_analysis.py
+uv run marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 4: Verify full notebook executes and results are correct**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -619,7 +619,7 @@ if nums:
 - [ ] **Step 5: Commit**
 
 ```bash
-git add stations_analysis.py
+git add notebooks/stations_analysis.py
 git commit -m "feat: add analysis cell — closest/farthest pairs, nearest neighbour table, summary stats"
 ```
 
@@ -628,7 +628,7 @@ git commit -m "feat: add analysis cell — closest/farthest pairs, nearest neigh
 ## Task 7: Final polish and CLAUDE.md update
 
 **Files:**
-- Modify: `stations_analysis.py` — add closing markdown cell
+- Modify: `notebooks/stations_analysis.py` — add closing markdown cell
 - Modify: `CLAUDE.md` — document new notebook
 
 - [ ] **Step 1: Add a closing context cell**
@@ -652,7 +652,7 @@ This notebook establishes the core PyQGIS → Pandas → marimo pipeline. The ne
 - **Statistical analysis** — bring in more weather observation data from the `weather`
   project and join it to this station geometry for spatial statistics
 
-*Run this notebook interactively with: `./marimo-qgis edit stations_analysis.py`*
+*Run this notebook interactively with: `./marimo-qgis edit notebooks/stations_analysis.py`*
     """)
     return
 ```
@@ -661,14 +661,14 @@ This notebook establishes the core PyQGIS → Pandas → marimo pipeline. The ne
 
 In the `Key Files` section, add:
 ```
-- `stations_analysis.py` — Distance analysis notebook: loads stations.gpkg, QgsDistanceArea geodesic matrix, Pandas nearest-neighbour analysis
+- `notebooks/stations_analysis.py` — Distance analysis notebook: loads stations.gpkg, QgsDistanceArea geodesic matrix, Pandas nearest-neighbour analysis
 ```
 
 - [ ] **Step 3: Final verification**
 
 ```bash
-uv run marimo check stations_analysis.py
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/sa_final.html 2>&1
+uv run marimo check notebooks/stations_analysis.py
+PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_final.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -677,7 +677,7 @@ Expected: `Exit: 0`.
 - [ ] **Step 4: Final commit**
 
 ```bash
-git add stations_analysis.py CLAUDE.md
+git add notebooks/stations_analysis.py CLAUDE.md
 git commit -m "feat: complete stations distance analysis notebook
 
 - 12 cells: setup, qgis_init, env display, load_layer, to_dataframe,

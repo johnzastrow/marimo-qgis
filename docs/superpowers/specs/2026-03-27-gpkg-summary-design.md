@@ -57,7 +57,7 @@ plus name, county, area fields.
 
 ### Cell 1 — QGIS init
 
-Same pattern as `stations_analysis.py`. Sets `sys.path`, `QT_QPA_PLATFORM=offscreen`,
+Same pattern as `notebooks/stations_analysis.py`. Sets `sys.path`, `QT_QPA_PLATFORM=offscreen`,
 initialises `QgsApplication([], False)`, calls `qgs.initQgis()`.
 
 Returns: `Qgis, QgsApplication, QgsVectorLayer, QgsProject, qgs`

@@ -22,13 +22,13 @@ No wrapper script or exported environment variables are needed:
 
 ```bash
 # Interactive editing
-uv run marimo edit qgis_test.py
+uv run marimo edit notebooks/qgis_test.py
 
 # View-only
-uv run marimo run qgis_test.py
+uv run marimo run notebooks/qgis_test.py
 
 # Export to static HTML
-uv run marimo export html qgis_test.py -o output.html
+uv run marimo export html notebooks/qgis_test.py -o output.html
 ```
 
 Each QGIS notebook self-configures by including this pattern in its init cell:
@@ -44,15 +44,15 @@ when launched from inside a live QGIS session.
 
 ## Known Issues / Status
 
-- **WORKING**: Full QGIS4 + marimo integration. `uv run marimo export html qgis_test.py` exits 0 with QGIS version table and sample data rendered.
+- **WORKING**: Full QGIS4 + marimo integration. `uv run marimo export html notebooks/qgis_test.py` exits 0 with QGIS version table and sample data rendered.
 - **RESOLVED**: Previous "cells not executing" was a stale `__marimo__/session/` cache.
 - **RESOLVED**: `AssertionError: Could not open <layer>` when launched from QGIS Processing tool — caused by relying on `os.getcwd()`. Fixed by using `os.path.dirname(os.path.abspath(__file__))`.
 
 ## Key Files
 
-- `stations_analysis.py` — Distance analysis: loads stations.gpkg, QgsDistanceArea geodesic matrix, Pandas nearest-neighbour analysis
-- `qgis_test.py` — Minimal notebook: confirms QGIS version
-- `marimo_tutorial.py` — Comprehensive marimo feature tour (no QGIS dependency)
+- `notebooks/stations_analysis.py` — Distance analysis: loads stations.gpkg, QgsDistanceArea geodesic matrix, Pandas nearest-neighbour analysis
+- `notebooks/qgis_test.py` — Minimal notebook: confirms QGIS version
+- `notebooks/marimo_tutorial.py` — Comprehensive marimo feature tour (no QGIS dependency)
 - `example/gpkg_summary.py` — Layer inventory, population trends, road length for Youngstown NY (20-layer GeoPackage)
 - `example/simple_marimo_qgis.py` — Ultra-simple QGIS+marimo demo, extensively commented
 - `processing/launch_marimo.py` — QGIS Processing Toolbox script to launch a marimo notebook from within QGIS
@@ -91,4 +91,4 @@ auto-sandboxes the kernel in a fresh isolated environment without
 `ModuleNotFoundError: No module named 'PyQt6'`
 
 QGIS notebooks carry a comment at the top explaining this instead of a header.
-PEP 723 headers are only safe in notebooks with no QGIS dependency (e.g. `marimo_tutorial.py`).
+PEP 723 headers are only safe in notebooks with no QGIS dependency (e.g. `notebooks/marimo_tutorial.py`).

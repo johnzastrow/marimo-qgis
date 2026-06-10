@@ -240,7 +240,7 @@ def _(mo):
     QGIS provides geometry measurement APIs that work directly on feature geometries —
     no coordinate conversion needed for projected layers. The example below computes
     total road network length using `QgsDistanceArea`, the same engine used for geodesic
-    distance in `stations_analysis.py`.
+    distance in `notebooks/stations_analysis.py`.
     """)
     return
 

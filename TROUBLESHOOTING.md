@@ -11,12 +11,12 @@ debugging tour.
 
 | Component | Version / Path |
 |-----------|----------------|
-| QGIS | 4.0.0-Norrköping (`1:4.0.0+43questing`) |
+| QGIS | 4.0.3-Norrköping |
 | QGIS Python bindings | `/usr/share/qgis/python` |
 | System Qt6 | 6.9.2 (`/lib/x86_64-linux-gnu/libQt6Core.so.6`) |
 | System PyQt6 | `/usr/lib/python3/dist-packages/PyQt6/` |
-| Python | 3.13.7 (system) |
-| marimo | 0.21.1 |
+| Python | 3.14.4 (system) — must match QGIS's compiled bindings; don't pin a fixed version |
+| marimo | 0.23.9 |
 | uv | for package management |
 | OS | Ubuntu "Questing" (development build) |
 
@@ -61,7 +61,7 @@ inherit:
 **Error** (shown in marimo browser console, not in terminal):
 
 ```
-Cell stations_analysis.py#cell=cell-2, line 10, in <module>
+Cell notebooks/stations_analysis.py#cell=cell-2, line 10, in <module>
     from qgis.core import (...)
 ImportError: /lib/x86_64-linux-gnu/libQt6Network.so.6: undefined symbol:
     _ZN14QObjectPrivateC2Ei, version Qt_6_PRIVATE_API
@@ -168,10 +168,13 @@ Qt6. The system PyQt6 (at `/usr/lib/python3/dist-packages/PyQt6/`) also uses the
 system Qt6. A venv created **without** `--system-site-packages` cannot see system
 PyQt6 and may find a bundled PyQt6 wheel (with its own incompatible Qt6) instead.
 
-**Fix**: Always create the venv with `--system-site-packages`:
+**Fix**: Always create the venv with `--system-site-packages`, against the
+interpreter QGIS uses (let the helper detect it rather than pinning a version):
 
 ```bash
-uv venv --python 3.13.7 --system-site-packages
+./qgis-env.sh setup
+# manual equivalent:
+#   uv venv --python "$(./qgis-env.sh path)" --system-site-packages
 ```
 
 **Verify**:
@@ -186,43 +189,61 @@ uv venv --python 3.13.7 --system-site-packages
 
 ### Issue 4: uv Ignores `--python` and Uses Wrong Version
 
-**Symptom**: `uv venv --python 3.13.7` creates a 3.12 venv. Cells fail with:
+**Symptom**: `uv venv --python <version>` creates a venv on a *different* Python
+than requested (e.g. a 3.12 venv). Cells then fail with an incompatibility or a
+`ModuleNotFoundError: No module named 'PyQt6'` because that Python has no matching
+system PyQt6.
 
 ```
 Python 3.12.12 is incompatible with requirement: >=3.13
 ```
 
 **Root cause**: A `.python-version` file in the project directory overrides the
-`--python` flag.
+`--python` flag. Passing a bare version (not a path) can also let uv pick one of
+its own downloaded standalone builds instead of the system interpreter.
 
-**Fix**:
+**Fix** — remove the pin and target QGIS's actual interpreter by path:
 
 ```bash
 rm -f .python-version
-uv venv --python 3.13.7 --system-site-packages
+./qgis-env.sh setup
+# manual equivalent:
+#   uv venv --python "$(./qgis-env.sh path)" --system-site-packages
 ```
 
 ---
 
-### Issue 5: `pathlib.Path(__file__)` Raises `NameError` in Marimo Cells
+### Issue 5: Locating data files — use `__file__`, not `os.getcwd()` or hardcoded paths
 
-**Error**:
+**Symptom**: A notebook opens its data file when launched one way but fails with
+`AssertionError` / "Could not open `<layer>`" when launched another way — most often
+from the QGIS Processing Toolbox, where the working directory differs from the repo.
+
+**Root cause**: `os.getcwd()` reflects wherever the *process* was started, which varies
+by launch method, so a path resolved against it points somewhere else.
+
+An earlier version of this guide claimed `__file__` was undefined inside a marimo cell.
+That is **not** true on current marimo: cells can read `__file__`, and it always points
+at the notebook's own path. (Verified by exporting a one-cell notebook that prints
+`os.path.dirname(os.path.abspath(__file__))`.)
+
+**Fix**: Resolve data files relative to the notebook via `__file__` — this is what the
+notebooks in this repo do, and it is portable across machines and launch methods:
 
 ```python
-NameError: name '__file__' is not defined
+import os
+gpkg = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stations.gpkg")
+layer = QgsVectorLayer(gpkg, "stations", "ogr")
 ```
 
-**Root cause**: Marimo wraps each cell in a function. Inside that function, `__file__`
-is not defined — it's a module-level attribute, not a cell-level one.
-
-**Fix**: Use absolute paths directly:
+Avoid both of these:
 
 ```python
-# Bad:
-gpkg = pathlib.Path(__file__).parent / "stations.gpkg"
+# Fragile — depends on the launch directory:
+gpkg = "stations.gpkg"
 
-# Good:
-gpkg = "/home/jcz/Github/marimo_qgis/stations.gpkg"
+# Non-portable — breaks on any other machine or after moving the repo:
+gpkg = "/home/jcz/Github/marimo_qgis/notebooks/stations.gpkg"
 ```
 
 ---
@@ -250,7 +271,8 @@ def _():
 Use underscore-prefixed names for things that must stay local:
 
 ```python
-_gpkg = "/home/jcz/Github/marimo_qgis/stations.gpkg"
+import os as _os
+_gpkg = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "stations.gpkg")
 layer = QgsVectorLayer(_gpkg, "stations", "ogr")
 return (layer,)  # _gpkg stays local, not exported
 ```
@@ -327,8 +349,10 @@ exec .venv/bin/marimo "$@"
 ### Venv Creation
 
 ```bash
-uv venv --python 3.13.7 --system-site-packages
-uv pip install marimo pandas numpy
+./qgis-env.sh setup
+# manual equivalent:
+#   uv venv --python "$(./qgis-env.sh path)" --system-site-packages
+#   uv pip install marimo pandas numpy
 ```
 
 ### Notebook QGIS Init Cell Pattern
@@ -364,5 +388,5 @@ def _():
 ```bash
 # Static export — confirms cells execute correctly end-to-end
 PYTHONPATH=/usr/share/qgis/python QT_QPA_PLATFORM=offscreen \
-  .venv/bin/marimo export html stations_analysis.py -o /tmp/out.html && echo OK
+  .venv/bin/marimo export html notebooks/stations_analysis.py -o /tmp/out.html && echo OK
 ```

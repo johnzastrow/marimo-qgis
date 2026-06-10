@@ -9,9 +9,9 @@ Run [marimo](https://marimo.io) reactive notebooks with
 
 | Component | Version |
 |-----------|---------|
-| QGIS | 4.0.0-Norrköping (tested); minimum 4.0 required |
-| marimo | 0.21.1 (tested); any recent release should work |
-| Python | 3.13 (tested with `uv venv --python 3.13`) |
+| QGIS | 4.0.3-Norrköping (tested); minimum 4.0 required |
+| marimo | 0.23.9 (tested); any recent release should work |
+| Python | Whatever QGIS is built against (3.14 on the test machine). Don't pin it — `./qgis-env.sh setup` matches it automatically. |
 | Platform | Linux (Ubuntu, QGIS apt repo) — tested and working |
 
 The QGIS plugin (`plugin/`) declares `qgisMinimumVersion=4.0` in `metadata.txt`. It has not been tested against QGIS 3.x; the 4.x PyQGIS API is assumed throughout.
@@ -42,9 +42,9 @@ browser.
 | `example/simple_marimo_qgis.py` | Minimal QGIS + marimo demo — best starting point, extensively commented |
 | `example/gpkg_summary.py` | Full GeoPackage inventory, population trends, road network length |
 | `example/processing_demo.py` | QGIS Processing algorithms — reactive buffer/dissolve, parameter inspector, capabilities reference |
-| `stations_analysis.py` | Geodesic distance matrix between weather stations, Pandas nearest-neighbour analysis |
-| `qgis_test.py` | Smoke test — confirms QGIS version and Python bindings |
-| `marimo_tutorial.py` | marimo feature tour with no QGIS dependency (UI elements, exports, reactivity) |
+| `notebooks/stations_analysis.py` | Geodesic distance matrix between weather stations, Pandas nearest-neighbour analysis |
+| `notebooks/qgis_test.py` | Smoke test — confirms QGIS version and Python bindings |
+| `notebooks/marimo_tutorial.py` | marimo feature tour with no QGIS dependency (UI elements, exports, reactivity) |
 
 ### Sample data (`.gpkg` files)
 
@@ -55,7 +55,7 @@ sidecar files, no proprietary format. QGIS reads and writes it natively.
 | File | Contents |
 |------|----------|
 | `example/example.gpkg` | 20 layers covering Youngstown, NY: buildings, streets, culverts, hydrology, land cover, parcels, population boundaries — three CRS (EPSG:26918, 4269, 4326) |
-| `stations.gpkg` | CWOP weather station locations in Maine, USA (points, EPSG:4326) |
+| `notebooks/stations.gpkg` | CWOP weather station locations in Maine, USA (points, EPSG:4326) |
 
 ---
 
@@ -70,7 +70,7 @@ CRS: EPSG:26918, EPSG:4269, EPSG:4326), builds a layer inventory using
 `QgsProviderRegistry.querySublayers()`, extracts decennial population data, and
 computes total road network length — all displayed as interactive marimo tables.
 
-`stations_analysis.py` loads CWOP weather stations from a GeoPackage, computes a
+`notebooks/stations_analysis.py` loads CWOP weather stations from a GeoPackage, computes a
 geodesic distance matrix using `QgsDistanceArea`, and analyses closest/farthest pairs
 and per-station nearest neighbours with Pandas.
 
@@ -112,20 +112,37 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/johnzastrow/marimo-qgis.git
 cd marimo-qgis
 
-# --system-site-packages is REQUIRED — it makes the system PyQt6
-# (installed alongside QGIS) visible inside the venv.  Without it,
-# uv will install a bundled PyQt6 wheel whose Qt6 version conflicts
-# with the system QGIS Qt6 and causes an ImportError at runtime.
-uv venv --python 3.13 --system-site-packages
-
-uv pip install marimo pandas numpy matplotlib
+# Recommended: let the helper detect QGIS's own Python and build the venv
+# against it. No version to pin, so it keeps working across QGIS/OS upgrades.
+./qgis-env.sh setup
 ```
 
-Verify the venv finds the **system** PyQt6, not a bundled wheel:
+`qgis-env.sh setup` asks QGIS which interpreter loads its bindings and creates
+the venv against that exact Python with `--system-site-packages`. This avoids
+the most common failure: pinning a Python version (e.g. `3.13`) that later stops
+matching QGIS after an OS upgrade, producing `ModuleNotFoundError: No module
+named 'PyQt6'`.
+
+<details>
+<summary>Manual setup (equivalent, if you prefer not to use the script)</summary>
+
+```bash
+# Point --python at the SYSTEM interpreter QGIS actually uses (find it with
+# './qgis-env.sh path'); do NOT hardcode a version that may drift from QGIS.
+# --system-site-packages is REQUIRED so the system PyQt6 (installed alongside
+# QGIS) is visible inside the venv; without it, uv installs a bundled PyQt6
+# wheel whose Qt6 conflicts with system QGIS and fails at runtime.
+uv venv --python "$(./qgis-env.sh path)" --system-site-packages
+uv pip install marimo pandas numpy matplotlib
+```
+</details>
+
+Verify the venv finds the **system** PyQt6, not a bundled wheel (or just run
+`./qgis-env.sh doctor`, which checks this and more):
 
 ```bash
 .venv/bin/python -c "import PyQt6; print(PyQt6.__file__)"
-# Must print: /usr/lib/python3/dist-packages/PyQt6/__init__.py
+# Must print a system path, e.g. /usr/lib/python3/dist-packages/PyQt6/__init__.py
 ```
 
 ### 4. Run a notebook
@@ -191,12 +208,12 @@ without `--system-site-packages`. That environment has no PyQt6, so every
 via the project venv instead:
 
 ```bash
-uv venv --python 3.13 --system-site-packages
-uv pip install marimo pandas numpy
+./qgis-env.sh setup          # detects QGIS's Python; no version pin
+# (manual equivalent: uv venv --python "$(./qgis-env.sh path)" --system-site-packages)
 ```
 
 PEP 723 headers are safe in notebooks with **no QGIS dependency** (e.g.
-`marimo_tutorial.py`), where the isolated environment has everything it needs.
+`notebooks/marimo_tutorial.py`), where the isolated environment has everything it needs.
 
 ### Locating data files
 
@@ -275,10 +292,12 @@ manual addition to the Toolbox without installing the plugin.
 
 ```
 marimo-qgis/
-├── stations_analysis.py          # QGIS distance matrix + Pandas analysis
-├── qgis_test.py                  # minimal: confirms QGIS version
-├── marimo_tutorial.py            # marimo feature tour (no QGIS dependency)
-├── stations.gpkg                 # sample data: CWOP weather stations, Maine
+├── qgis-env.sh                   # detect QGIS's Python + build the venv (setup / doctor)
+├── notebooks/
+│   ├── stations_analysis.py      # QGIS distance matrix + Pandas analysis
+│   ├── stations.gpkg             # sample data: CWOP weather stations, Maine
+│   ├── qgis_test.py              # minimal: confirms QGIS version
+│   └── marimo_tutorial.py        # marimo feature tour (no QGIS dependency)
 ├── example/
 │   ├── example.gpkg              # Youngstown NY area: 20-layer GeoPackage
 │   ├── gpkg_summary.py           # layer inventory, population trends, road length
@@ -324,11 +343,15 @@ The following aspects of this approach are fully platform-independent:
 On Linux, QGIS is installed via the system package manager (apt). PyQt6 lands in the
 system Python packages (`/usr/lib/python3/dist-packages/PyQt6/`), so a venv created
 with `--system-site-packages` inherits it automatically. The bindings are at a stable,
-well-known path (`/usr/share/qgis/python`).
+well-known path (`/usr/share/qgis/python`). `./qgis-env.sh setup` automates the Linux
+case end to end (and `./qgis-env.sh doctor` diagnoses a broken environment).
 
 On Windows and macOS, **QGIS bundles its own Python, Qt6, and PyQt6 inside the
 application**. There is no system PyQt6 to inherit, and `--system-site-packages` does
-not help.
+not help. The same principle still applies, though: build the environment around
+**QGIS's own bundled interpreter** rather than pinning a separate Python version —
+that is exactly what the platform-specific instructions below do. (`qgis-env.sh` is
+currently Linux-only; the Windows/macOS steps remain manual.)
 
 ### Windows
 

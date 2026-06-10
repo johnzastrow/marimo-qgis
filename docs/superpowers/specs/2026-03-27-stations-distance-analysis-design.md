@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-27
 **Project:** marimo_qgis
-**File to create/replace:** `stations_analysis.py`
+**File to create/replace:** `notebooks/stations_analysis.py`
 
 ---
 
@@ -21,7 +21,7 @@ future work.
 
 ## Data
 
-- **File:** `stations.gpkg` (in project root)
+- **File:** `stations.gpkg` (in notebooks/)
 - **Layer:** single point layer, EPSG:4326
 - **Features:** 9 stations, fields confirmed in file: `site`, `lat`, `long`, `elev_m`, `ned_m`, `city`, `county`, `state`, `status`, `station_type`, `equipment`, `software`, `operator`, `forecast_office`, `timezone`, `url`, `notes`, `ts`
 
@@ -120,12 +120,12 @@ Every cell is preceded by a `mo.md()` cell explaining:
 
 ## Constraints
 
-- Add to `pyproject.toml` dependencies and to the PEP 723 `# /// script` header in `stations_analysis.py`: `pandas` and `numpy` (no version pins needed)
+- Add to `pyproject.toml` dependencies and to the PEP 723 `# /// script` header in `notebooks/stations_analysis.py`: `pandas` and `numpy` (no version pins needed)
 - Install via `uv add pandas numpy` before running
 - `QT_QPA_PLATFORM=offscreen` set inside `qgis_init` cell
 - `PYTHONPATH=/usr/share/qgis/python` required at launch (via `marimo-qgis` wrapper)
-- Run with: `./marimo-qgis edit stations_analysis.py`
-- Verify with: `PYTHONPATH=/usr/share/qgis/python uv run marimo export html stations_analysis.py -o /tmp/out.html`
+- Run with: `./marimo-qgis edit notebooks/stations_analysis.py`
+- Verify with: `PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/out.html`
 
 ---
 

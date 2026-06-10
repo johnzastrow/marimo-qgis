@@ -11,7 +11,18 @@ This project provides marimo notebooks that leverage QGIS4 (PyQGIS) libraries.
 
 ```bash
 cd /home/jcz/Github/marimo_qgis
-uv venv --python /usr/bin/python3.14 --system-site-packages
+./qgis-env.sh setup     # detects QGIS's Python and builds the venv to match
+```
+
+`qgis-env.sh setup` detects the interpreter QGIS's bindings actually load under
+and creates the venv against it with `--system-site-packages` — no Python version
+to pin, so it survives QGIS/OS upgrades. If something is off, `./qgis-env.sh
+doctor` reports exactly what and how to fix it.
+
+The manual equivalent (only if you'd rather not use the script):
+
+```bash
+uv venv --python "$(./qgis-env.sh path)" --system-site-packages
 uv pip install marimo pandas numpy matplotlib
 ```
 
@@ -40,13 +51,13 @@ No wrapper script or exported environment variables are needed. Just use `uv run
 
 ```bash
 # Interactive editing
-uv run marimo edit qgis_test.py
+uv run marimo edit notebooks/qgis_test.py
 
 # View-only (no code editing)
-uv run marimo run qgis_test.py
+uv run marimo run notebooks/qgis_test.py
 
 # Export to static HTML (headless, no browser needed)
-uv run marimo export html qgis_test.py -o output.html
+uv run marimo export html notebooks/qgis_test.py -o output.html
 ```
 
 Each notebook's QGIS init cell handles the two environment requirements

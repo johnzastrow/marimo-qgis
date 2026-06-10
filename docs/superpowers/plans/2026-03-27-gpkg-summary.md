@@ -340,7 +340,7 @@ def _(mo):
 QGIS provides geometry measurement APIs that work directly on feature geometries —
 no coordinate conversion needed for projected layers. The example below computes
 total road network length using `QgsDistanceArea`, the same engine used for geodesic
-distance in `stations_analysis.py`.
+distance in `notebooks/stations_analysis.py`.
     """)
     return
 ```
@@ -447,9 +447,10 @@ In `README.md`, find the project structure block and add the example lines:
 ```
 marimo-qgis/
 ├── marimo-qgis          # wrapper script (sets env vars, runs marimo)
-├── stations_analysis.py # example notebook: QGIS distance matrix + Pandas analysis
-├── qgis_test.py         # minimal notebook: confirms QGIS version
-├── stations.gpkg        # sample data: CWOP weather stations in Maine, USA
+├── notebooks/
+│   ├── stations_analysis.py # example notebook: QGIS distance matrix + Pandas analysis
+│   ├── stations.gpkg        # sample data: CWOP weather stations in Maine, USA
+│   └── qgis_test.py         # minimal notebook: confirms QGIS version
 ├── example/
 │   ├── example.gpkg     # Youngstown NY area: 9-layer GeoPackage, EPSG:26918
 │   ├── gpkg_summary.py  # example notebook: layer inventory, population trends, road length
@@ -461,7 +462,7 @@ marimo-qgis/
 
 - [ ] **Step 2: Update README example notebook section**
 
-Add a second example after the `stations_analysis.py` description:
+Add a second example after the `notebooks/stations_analysis.py` description:
 
 ```markdown
 `example/gpkg_summary.py` loads a 9-layer GeoPackage (Youngstown NY area, EPSG:26918),

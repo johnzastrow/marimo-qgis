@@ -3,12 +3,12 @@
 # has inline script metadata, creating a fresh isolated environment without
 # --system-site-packages.  That environment has no PyQt6, so every
 # `from qgis.core import ...` fails with ModuleNotFoundError.
-# Manage dependencies via the project venv instead:
-#   uv venv --python 3.13 --system-site-packages
-#   uv pip install marimo pandas numpy
+# Manage dependencies via the project venv instead — build it with
+# ./qgis-env.sh setup, which targets QGIS's own Python (no version pin):
+#   ./qgis-env.sh setup
 #
-# Run with:  uv run marimo edit stations_analysis.py
-#            uv run marimo run  stations_analysis.py
+# Run with:  uv run marimo edit notebooks/stations_analysis.py
+#            uv run marimo run  notebooks/stations_analysis.py
 #
 # No wrapper script is needed.  The QGIS init cell handles both
 # sys.path (equivalent to PYTHONPATH) and QT_QPA_PLATFORM before
@@ -124,8 +124,9 @@ so this check is essential.
 def _(QgsVectorLayer):
     # Locate the GeoPackage relative to THIS file, not os.getcwd().
     # os.getcwd() reflects the launch directory, which varies.  __file__ is
-    # always the notebook's own path, so dirname(__file__) is always the repo
-    # root where stations.gpkg lives — regardless of how the notebook was started.
+    # always the notebook's own path, so dirname(__file__) is always the
+    # notebooks/ directory where stations.gpkg sits beside this notebook —
+    # regardless of how the notebook was started.
     import os as _os
     _gpkg = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "stations.gpkg")
     layer = QgsVectorLayer(_gpkg, "stations", "ogr")
@@ -330,7 +331,7 @@ This notebook establishes the core PyQGIS → Pandas → marimo pipeline. The ne
 - **Statistical analysis** — bring in more weather observation data from the `weather`
   project and join it to this station geometry for spatial statistics
 
-*Run this notebook interactively with: `uv run marimo edit stations_analysis.py`*
+*Run this notebook interactively with: `uv run marimo edit notebooks/stations_analysis.py`*
     """)
     return
 

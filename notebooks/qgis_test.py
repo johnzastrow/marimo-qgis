@@ -3,12 +3,12 @@
 # has inline script metadata, creating a fresh isolated environment without
 # --system-site-packages.  That environment has no PyQt6, so every
 # `from qgis.core import ...` fails with ModuleNotFoundError.
-# Manage dependencies via the project venv instead:
-#   uv venv --python 3.13 --system-site-packages
-#   uv pip install marimo
+# Manage dependencies via the project venv instead — build it with
+# ./qgis-env.sh setup, which targets QGIS's own Python (no version pin):
+#   ./qgis-env.sh setup
 #
-# Run with:  uv run marimo edit qgis_test.py
-#            uv run marimo run  qgis_test.py
+# Run with:  uv run marimo edit notebooks/qgis_test.py
+#            uv run marimo run  notebooks/qgis_test.py
 #
 # No wrapper script is needed.  The QGIS init cell handles both
 # sys.path (equivalent to PYTHONPATH) and QT_QPA_PLATFORM before

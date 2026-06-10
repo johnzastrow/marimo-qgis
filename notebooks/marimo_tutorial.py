@@ -7,8 +7,8 @@
 # ]
 # ///
 #
-# Run with:  uv run marimo edit marimo_tutorial.py
-#            uv run marimo run  marimo_tutorial.py
+# Run with:  uv run marimo edit notebooks/marimo_tutorial.py
+#            uv run marimo run  notebooks/marimo_tutorial.py
 #
 # This notebook has no QGIS dependency.  For QGIS notebooks, no wrapper script
 # is needed — the init cell adds sys.path and sets QT_QPA_PLATFORM before
