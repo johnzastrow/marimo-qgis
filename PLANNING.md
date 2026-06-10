@@ -2172,6 +2172,17 @@ repo root (closes G2) and updated the README License section MIT → GPLv3.
   - **Needs in-QGIS testing**: bridge startup in a live plugin, `get_layer`
     (geopandas read of the FlatGeobuf), and the Processing launch → live notebook
     path. Open: **G1** (email) and **G5** (category) still deferred.
+- 2026-06-10: **Phase 1 validated in a live QGIS session** (QGIS 4.0.3 / Qt 6.10.2
+  / Python 3.14.4). Full chain confirmed against a real project: bridge started
+  (`bridge listening on 127.0.0.1:38757`), Processing launch injected the env,
+  notebook showed 🟢 Live, `list_layers` populated the dropdown
+  (`landcover_woodland`), and `get_layer` returned a GeoDataFrame
+  (106 features, 27 cols, EPSG:4269) rendered as a marimo table. **Install lesson
+  worth keeping:** the plugin must be a **symlink** to `plugin/` (not a stale
+  copied dir) and QGIS must be **restarted** after adding new sub-packages
+  (`bridge/`, `ui/`) — a copied/old plugin silently runs pre-bridge code and the
+  notebook falls back to headless. `qgis-env.sh setup` must have run since
+  `geopandas` was added, or `get_layer` raises `ModuleNotFoundError`.
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 
