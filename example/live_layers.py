@@ -4,7 +4,7 @@
 # the bridge client also needs geopandas).
 #
 # Two ways to run:
-#   - LIVE:     QGIS ▸ Processing Toolbox ▸ marimo ▸ "Launch marimo notebook"
+#   - LIVE:     click the marimo toolbar button → manager panel → Launch…
 #               (the plugin injects MARIMO_QGIS_PORT/TOKEN → reads your open project)
 #   - HEADLESS: uv run marimo edit example/live_layers.py
 #               (no plugin → own QgsApplication; no live layers)
@@ -58,8 +58,8 @@ def _(mo, mode, qgis):
         _msg = (
             "### ⚪ Headless\n"
             "No plugin/bridge detected — running an own `QgsApplication`. "
-            "Launch this notebook from QGIS (Processing ▸ marimo ▸ Launch marimo "
-            "notebook) with a project open to see live layers."
+            "Launch this notebook from QGIS (marimo toolbar button → manager "
+            "panel → Launch…) with a project open to see live layers."
         )
     mo.md(_msg)
     return

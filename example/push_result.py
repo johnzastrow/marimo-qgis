@@ -4,7 +4,7 @@
 # Phase 2 bridge demo: read a live layer, buffer it with geopandas, and push the
 # result back into the running QGIS project as a new layer.
 #
-#   LIVE:     QGIS ▸ Processing ▸ marimo ▸ Launch marimo notebook → this file
+#   LIVE:     click the marimo toolbar button → manager panel → Launch… → this file
 #   HEADLESS: uv run marimo edit example/push_result.py  (no push target)
 
 import marimo

@@ -194,9 +194,8 @@ def _():
 are required; the notebook is self-contained.
 
 `setdefault` leaves `QT_QPA_PLATFORM` unchanged if it was already set — so
-notebooks launched from inside a live QGIS session (via the Processing Toolbox
-script in `processing/launch_marimo.py`) correctly inherit the real display
-platform rather than forcing `offscreen`.
+notebooks launched from inside a live QGIS session (the plugin's launcher, which
+does not force `offscreen`) correctly inherit the real display platform.
 
 ### Do not use PEP 723 inline script metadata in QGIS notebooks
 
@@ -247,9 +246,12 @@ flags this as an empty cell, and nothing is displayed.
 
 ## QGIS plugin
 
-`plugin/` is a full QGIS plugin that registers the marimo launcher in the
-Processing Toolbox automatically — no manual "Add Script" step needed.
-The algorithm appears under **marimo ▸ Launch marimo notebook**.
+`plugin/` is a QGIS 4 plugin that adds a **marimo toolbar button**. Clicking it
+opens the **marimo manager panel** (a dock) where you launch any notebook in your
+browser. Launched notebooks get a live HTTP **bridge** to the running QGIS
+project — read layers, the current selection and canvas extent, and push results
+back as new layers — through the bundled `qgis_bridge` client. Without the plugin
+the same notebooks fall back to a headless `QgsApplication`.
 
 ### Install from ZIP (recommended)
 
@@ -264,28 +266,34 @@ then in QGIS:
 # Clone the repo then symlink plugin/ into the QGIS plugins directory.
 # The symlink name (marimo_launcher) becomes the Python package name.
 ln -s /path/to/marimo_qgis/plugin \
-      ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/marimo_launcher
+      ~/.local/share/QGIS/QGIS4/profiles/default/python/plugins/marimo_launcher
 ```
 
-Then: **Plugins ▸ Manage and Install Plugins ▸ Installed** — enable **marimo Launcher**.
+Then: **Plugins ▸ Manage and Install Plugins ▸ Installed** — enable **marimo
+Launcher**. Restart QGIS after pulling changes that add new sub-modules (a
+running plugin keeps the old code in memory). The marimo button then appears on
+the toolbar and under **Plugins ▸ marimo**.
 
 ### Build the ZIP yourself
 
 ```bash
-make package   # → marimo_launcher.zip
+make package   # → marimo_launcher.zip  (bundles the whole plugin/ tree + LICENSE)
 ```
 
 ### How it works
 
-| File | Role |
+| Path | Role |
 |------|------|
 | `plugin/__init__.py` | `classFactory()` entry point — QGIS loads this first |
-| `plugin/plugin.py` | `MarimoLauncherPlugin` — registers the provider on startup, removes it on unload |
-| `plugin/provider.py` | `MarimoProvider` — groups algorithms under the "marimo" Toolbox heading |
-| `plugin/algorithm.py` | `LaunchMarimoAlgorithm` — the launch logic (notebook path, mode, working dir) |
+| `plugin/plugin.py` | `MarimoLauncherPlugin` — starts the bridge, adds the toolbar button + dock |
+| `plugin/bridge/` | localhost HTTP bridge to the live project (`auth`, `api`, `server`, `convert`) |
+| `plugin/ui/dock.py` | `MarimoManagerDock` — notebook list + Launch…/Stop |
+| `plugin/ui/process.py` | `MarimoProcessManager` — launches notebooks with the bridge env injected |
+| `qgis_bridge/` | notebook-side client (QGIS-free): `QgisBridge` + `HeadlessQGIS` |
 
-The `processing/launch_marimo.py` standalone script remains available for
-manual addition to the Toolbox without installing the plugin.
+The standalone `processing/launch_marimo.py` script remains available for manual
+addition to the Processing Toolbox if you prefer launching without the plugin
+(note: it does not connect the bridge).
 
 ---
 
@@ -305,12 +313,15 @@ marimo-qgis/
 │   ├── simple_marimo_qgis.py     # minimal QGIS+marimo demo, extensively commented
 │   ├── processing_demo.py        # Processing algorithms, parameter inspector
 │   └── INSTRUCTIONS.md           # quick start for this example
-├── plugin/                       # QGIS plugin (auto-registers in Toolbox)
+├── plugin/                       # QGIS 4 plugin (toolbar button + live bridge)
 │   ├── __init__.py               # classFactory() entry point
 │   ├── metadata.txt              # plugin name, version, QGIS minimum version
-│   ├── plugin.py                 # plugin class — registers/removes provider
-│   ├── provider.py               # Processing provider — "marimo" Toolbox group
-│   └── algorithm.py              # LaunchMarimoAlgorithm
+│   ├── plugin.py                 # plugin class — starts bridge, adds toolbar/dock
+│   ├── runtime.py                # process-wide bridge handle
+│   ├── icons/marimo.svg          # toolbar icon
+│   ├── bridge/                   # localhost HTTP bridge (auth, api, server, convert)
+│   └── ui/                       # dock widget + process manager
+├── qgis_bridge/                  # notebook-side bridge client (no QGIS dependency)
 ├── processing/
 │   └── launch_marimo.py          # standalone Processing script (no plugin needed)
 ├── pyproject.toml                # project metadata and dependencies

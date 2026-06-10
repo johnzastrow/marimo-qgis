@@ -4,7 +4,7 @@
 # Phase 2 bridge demo: analyse the features currently selected in QGIS, and show
 # the live map-canvas extent.
 #
-#   LIVE: QGIS ▸ Processing ▸ marimo ▸ Launch marimo notebook → this file,
+#   LIVE: click the marimo toolbar button → manager panel → Launch… → this file,
 #         then select features in a layer and click "Load current selection".
 
 import marimo

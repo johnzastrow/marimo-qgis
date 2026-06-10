@@ -2144,6 +2144,17 @@ project layer has no dependency on the temp file (which is cleaned up on unload)
 `canvas_extent` / `selected_features` require `iface` (passed from the plugin);
 without it they return 503 (relevant to the Phase 4 standalone server).
 
+**D7 — Entry point: toolbar button + dock, not the Processing Toolbox.** The
+plugin's launch UI moves out of the Processing Toolbox. A **toolbar button**
+(`icons/marimo.svg`) + a **Plugins ▸ marimo** menu action toggle the
+`MarimoManagerDock` (added hidden on load, revealed on demand; two-way checked
+sync). Launching + bridge-env injection now go through the dock's
+`MarimoProcessManager`. The Processing provider is removed (`provider.py` /
+`algorithm.py` deleted, `hasProcessingProvider=no`), so the plugin is now a GUI
+plugin. Version 0.1.0 → 0.2.0; `category` Analysis → Plugins (**closes G5**); the
+standalone `processing/launch_marimo.py` script stays as a no-plugin option (it
+does not connect the bridge).
+
 ### 8.5 Change log
 
 - 2026-06-10: Closed **G2** (added GPLv3 `LICENSE`), **G3** (Makefile now copies
@@ -2216,6 +2227,16 @@ without it they return 503 (relevant to the Phase 4 standalone server).
   pending in-QGIS testing** (dock interactions, insert/extent/selected, raster
   fetch). Verified w/o QGIS: compile (incl. Qt dock), ruff, HTTP regression.
   Phase 3 (per §7) = map rendering + Processing-algorithm bridge.
+- 2026-06-10: **UX change (D7): toolbar button replaces the Processing Toolbox
+  entry.** Rewrote `plugin.py` as a GUI plugin (toolbar button + Plugins-menu
+  action toggling the hidden-on-load dock); deleted `provider.py`/`algorithm.py`;
+  `metadata.txt` → `hasProcessingProvider=no`, `icon=icons/marimo.svg`,
+  `category=Plugins`, version 0.2.0; added `plugin/icons/marimo.svg`. Updated
+  README (plugin section + structure tree), example headers, and the
+  QT_QPA_PLATFORM notes (README/MARIMO_QGIS) to the new launcher. Verified:
+  compile, ruff, marimo check; `make package` excludes provider/algorithm and
+  includes the icon + dock. In-QGIS testing pending (button toggles dock; launch
+  from dock).
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 

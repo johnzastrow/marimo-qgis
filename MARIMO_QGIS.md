@@ -69,8 +69,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # headless Qt
 ```
 
 `setdefault` leaves `QT_QPA_PLATFORM` unchanged if it was already set — so
-notebooks launched from within a live QGIS session (via the Processing Toolbox
-script) correctly inherit the real display platform.
+notebooks launched from within a live QGIS session (via the plugin's launcher)
+correctly inherit the real display platform.
 
 ## Notebook Format
 

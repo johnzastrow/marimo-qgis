@@ -1,7 +1,8 @@
-from qgis.core import Qgis, QgsApplication
+import os
 
-from . import runtime
-from .provider import MarimoProvider
+from qgis.core import Qgis, QgsApplication
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction
 
 
 def _log(message, level="info"):
@@ -17,62 +18,37 @@ def _log(message, level="info"):
 
 class MarimoLauncherPlugin:
     """
-    Main plugin class.  QGIS instantiates this via classFactory() and calls:
-      - initProcessing() early in startup (because hasProcessingProvider=yes
-        in metadata.txt) to register the Processing provider
-      - initGui() once the QGIS UI is ready
-      - unload() when the plugin is disabled or QGIS exits
+    GUI plugin. QGIS instantiates this via classFactory() and calls initGui()
+    once the UI is ready and unload() on teardown.
 
-    On load it also starts the localhost HTTP bridge (plugin/bridge) so notebooks
-    launched from QGIS can read the live project. Bridge startup is fail-safe: if
-    it cannot bind, the Processing launcher still works and notebooks fall back to
-    headless mode.
+    initGui():
+      - starts the localhost HTTP bridge (plugin/bridge) so notebooks launched
+        from QGIS can read/write the live project (fail-safe: a bridge error
+        never blocks the plugin from loading);
+      - adds the marimo manager dock (hidden on load) and a toolbar button (plus
+        a Plugins-menu entry) that toggles it.
+
+    The dock launches notebooks via MarimoProcessManager, which injects the
+    bridge connection into the subprocess environment.
     """
+
+    MENU = "marimo"
 
     def __init__(self, iface):
         self.iface = iface
-        self.provider = None
+        self.plugin_dir = os.path.dirname(os.path.realpath(__file__))
         self._temp = None
         self._api = None
         self._server = None
         self._pm = None
         self._dock = None
-
-    def initProcessing(self):
-        """Register the marimo Processing provider with QGIS."""
-        self.provider = MarimoProvider()
-        QgsApplication.processingRegistry().addProvider(self.provider)
+        self._action = None
 
     def initGui(self):
-        # Processing provider is registered in initProcessing(), which QGIS
-        # calls before initGui() when hasProcessingProvider=yes.
-        self.initProcessing()
         self._start_bridge()
-        self._add_dock()
+        self._add_ui()
 
-    def _add_dock(self):
-        """Add the notebook-manager dock (fail-safe — never break plugin load)."""
-        try:
-            from qgis.PyQt.QtCore import Qt
-
-            from .ui.dock import MarimoManagerDock
-            from .ui.process import MarimoProcessManager
-
-            self._pm = MarimoProcessManager()
-            self._dock = MarimoManagerDock(self._pm, self._server)
-            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
-        except Exception as exc:  # noqa: BLE001
-            _log(f"dock failed to load: {exc!r}", "error")
-
-    def _remove_dock(self):
-        if self._dock is not None:
-            try:
-                self.iface.removeDockWidget(self._dock)
-                self._dock.deleteLater()
-            except Exception as exc:  # noqa: BLE001
-                _log(f"dock removal error: {exc!r}", "warning")
-            self._dock = None
-        self._pm = None
+    # ---- bridge lifecycle ------------------------------------------------
 
     def _start_bridge(self):
         """Start the HTTP bridge server on the Qt main thread (fail-safe)."""
@@ -89,7 +65,6 @@ class MarimoLauncherPlugin:
             # passed so canvas_extent / selected_features can reach the desktop.
             self._api = QGISBridgeAPI(self._temp, iface=self.iface)
             self._server = QgisBridgeServer(self._api).start()
-            runtime.set_server(self._server)
             _log(f"bridge listening on 127.0.0.1:{self._server.port}")
         except Exception as exc:  # noqa: BLE001 — never break plugin load
             _log(f"bridge failed to start: {exc!r}", "error")
@@ -97,6 +72,8 @@ class MarimoLauncherPlugin:
 
     def _stop_bridge(self):
         """Stop the server, free the temp store, clear the runtime handle."""
+        from . import runtime
+
         runtime.set_server(None)
         if self._server is not None:
             try:
@@ -109,10 +86,59 @@ class MarimoLauncherPlugin:
             self._temp.cleanup()
             self._temp = None
 
+    # ---- UI (toolbar button + dock) --------------------------------------
+
+    def _add_ui(self):
+        """Add the manager dock (hidden) and a toolbar button that toggles it."""
+        try:
+            from qgis.PyQt.QtCore import Qt
+
+            from . import runtime
+            from .ui.dock import MarimoManagerDock
+            from .ui.process import MarimoProcessManager
+
+            self._pm = MarimoProcessManager()
+            runtime.set_server(self._server)
+
+            self._dock = MarimoManagerDock(self._pm, self._server)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
+            self._dock.hide()  # revealed on demand from the toolbar
+
+            icon_path = os.path.join(self.plugin_dir, "icons", "marimo.svg")
+            self._action = QAction(
+                QIcon(icon_path), "marimo Notebooks", self.iface.mainWindow()
+            )
+            self._action.setCheckable(True)
+            self._action.setToolTip("Show/hide the marimo notebook manager")
+            # Two-way sync: button toggles the dock; closing the dock unchecks it.
+            self._action.toggled.connect(self._dock.setVisible)
+            self._dock.visibilityChanged.connect(self._action.setChecked)
+
+            self.iface.addToolBarIcon(self._action)
+            self.iface.addPluginToMenu(self.MENU, self._action)
+        except Exception as exc:  # noqa: BLE001 — never break plugin load
+            _log(f"UI failed to load: {exc!r}", "error")
+
+    def _remove_ui(self):
+        if self._action is not None:
+            try:
+                self.iface.removeToolBarIcon(self._action)
+                self.iface.removePluginMenu(self.MENU, self._action)
+            except Exception as exc:  # noqa: BLE001
+                _log(f"toolbar removal error: {exc!r}", "warning")
+            self._action = None
+        if self._dock is not None:
+            try:
+                self.iface.removeDockWidget(self._dock)
+                self._dock.deleteLater()
+            except Exception as exc:  # noqa: BLE001
+                _log(f"dock removal error: {exc!r}", "warning")
+            self._dock = None
+        self._pm = None
+
+    # ---- teardown --------------------------------------------------------
+
     def unload(self):
-        """Remove the dock + provider and tear down the bridge."""
-        self._remove_dock()
+        """Remove the UI and tear down the bridge."""
+        self._remove_ui()
         self._stop_bridge()
-        if self.provider is not None:
-            QgsApplication.processingRegistry().removeProvider(self.provider)
-            self.provider = None

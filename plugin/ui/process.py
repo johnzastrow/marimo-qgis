@@ -6,9 +6,8 @@ connection (`MARIMO_QGIS_PORT` / `MARIMO_QGIS_TOKEN`) is injected into the
 subprocess environment so the notebook's `qgis_bridge.QgisBridge()` can reach the
 live QGIS project.
 
-This is the programmatic launch path used by the dock widget. The Processing
-"Launch marimo notebook" algorithm performs the same env injection via
-`plugin.runtime.bridge_env()`.
+The dock widget launches notebooks through this; the bridge connection is read
+from `plugin.runtime.bridge_env()`.
 """
 
 import os

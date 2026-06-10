@@ -1,9 +1,9 @@
 """Process-wide handle to the running bridge server.
 
-Processing algorithms are instantiated by QGIS, not by the plugin object, so they
-cannot reach the plugin instance to learn the bridge port/token. This tiny module
-holds a reference set by the plugin on startup and read by any code that launches
-a notebook, so the launched notebook inherits the bridge connection.
+Holds a reference set by the plugin on startup and read by MarimoProcessManager
+when it launches a notebook, so the notebook inherits the bridge connection
+(MARIMO_QGIS_PORT / MARIMO_QGIS_TOKEN) without threading the server object through
+every caller.
 """
 
 _server = None
