@@ -2150,6 +2150,28 @@ repo root (closes G2) and updated the README License section MIT → GPLv3.
   Still to do for Phase 1: plugin lifecycle wiring (start/stop server in
   plugin.py), `MarimoProcessManager` env injection, the `qgis_bridge` client
   package, and `example/live_layers.py`.
+- 2026-06-10: **Phase 1 complete.** Added:
+  - `plugin/runtime.py` — process-wide bridge handle so Processing algorithms
+    (instantiated by QGIS, not the plugin) can inject the bridge env.
+  - `plugin/plugin.py` — starts the bridge in `initGui()` (fail-safe: a bridge
+    error never blocks plugin load), stops it + cleans the temp store in
+    `unload()`.
+  - `plugin/algorithm.py` — the "Launch marimo" algorithm now injects
+    `MARIMO_QGIS_PORT/TOKEN` via `runtime.bridge_env()`, so notebooks launched
+    from QGIS auto-connect to the live project.
+  - `plugin/ui/process.py` — `MarimoProcessManager` (programmatic launch + env
+    injection; for the Phase 2 dock).
+  - `qgis_bridge/` — notebook-side client (QGIS-free: stdlib `urllib` +
+    `geopandas`): `QgisBridge` (live) and `HeadlessQGIS` (fallback).
+  - `example/live_layers.py` — live layer dropdown → GeoDataFrame table, with
+    headless fallback.
+  - `qgis-env.sh`: added `geopandas` to the default deps (bridge client needs it).
+  - **Verified w/o QGIS**: client↔server round trip (no-env → RuntimeError;
+    project()/list_layers() round-trip; wrong token → BridgeError 401). `make
+    package` confirmed to bundle `bridge/`, `ui/`, `runtime.py`, `LICENSE`.
+  - **Needs in-QGIS testing**: bridge startup in a live plugin, `get_layer`
+    (geopandas read of the FlatGeobuf), and the Processing launch → live notebook
+    path. Open: **G1** (email) and **G5** (category) still deferred.
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 

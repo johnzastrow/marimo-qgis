@@ -42,6 +42,7 @@ browser.
 | `example/simple_marimo_qgis.py` | Minimal QGIS + marimo demo — best starting point, extensively commented |
 | `example/gpkg_summary.py` | Full GeoPackage inventory, population trends, road network length |
 | `example/processing_demo.py` | QGIS Processing algorithms — reactive buffer/dissolve, parameter inspector, capabilities reference |
+| `example/live_layers.py` | **Live bridge (experimental):** lists the layers in your *running* QGIS project and pulls one into a GeoDataFrame — falls back to headless when run standalone |
 | `notebooks/stations_analysis.py` | Geodesic distance matrix between weather stations, Pandas nearest-neighbour analysis |
 | `notebooks/qgis_test.py` | Smoke test — confirms QGIS version and Python bindings |
 | `notebooks/marimo_tutorial.py` | marimo feature tour with no QGIS dependency (UI elements, exports, reactivity) |

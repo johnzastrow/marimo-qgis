@@ -120,6 +120,13 @@ class LaunchMarimoAlgorithm(QgsProcessingAlgorithm):
         env["PYTHONPATH"] = "/usr/share/qgis/python"
         env.pop("QT_QPA_PLATFORM", None)
 
+        # Connect the notebook to the live QGIS project via the bridge, if the
+        # plugin started one. No-op (empty dict) when the bridge isn't running,
+        # in which case the notebook falls back to headless mode.
+        from .runtime import bridge_env
+
+        env.update(bridge_env())
+
         cmd = ["uv", "run", "marimo", mode, notebook]
 
         feedback.pushInfo(f"Notebook     : {notebook}")
