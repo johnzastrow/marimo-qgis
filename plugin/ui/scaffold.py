@@ -12,9 +12,16 @@ import os
 
 # The notebook body. A sentinel (not str.format) is used for substitution because
 # the template itself contains f-string braces.
-_TEMPLATE = '''# DO NOT add a PEP 723 `# /// script` block: this notebook imports PyQGIS in the
+_TEMPLATE = '''# =============================================================================
+# STARTER STUB — created by the marimo QGIS plugin.
+#
+# This is a minimal, working example: it connects to the live QGIS project and
+# summarises a layer. It is meant as a starting point — extend it with your own
+# cells and analysis, and replace the summary cell at the bottom with your work.
+# =============================================================================
+#
+# DO NOT add a PEP 723 `# /// script` block: this notebook imports PyQGIS in the
 # headless fallback, and uv would sandbox it without --system-site-packages.
-# Created by the marimo QGIS plugin.
 
 import marimo
 
@@ -36,9 +43,12 @@ def _(mo):
         """
         # New marimo + QGIS notebook
 
-        **What this demonstrates.** A starting point that reads the live QGIS
-        project and summarises a layer. Replace the last cell with your own
-        analysis.
+        > **This is a starter stub** created by the marimo QGIS plugin — a
+        > minimal working example for you to build on. Add your own cells and
+        > replace the summary at the bottom with your analysis.
+
+        **What this demonstrates.** Connecting to the live QGIS project and
+        summarising a layer — the smallest end-to-end example.
 
         **Dependencies.** The `qgis_bridge` client; a running QGIS with the
         marimo plugin enabled (live mode); `geopandas`. Without the plugin it
