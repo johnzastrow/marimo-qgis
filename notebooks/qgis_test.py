@@ -29,6 +29,24 @@ def _():
 
 @app.cell
 def _(mo):
+    mo.md(
+        """
+        **What this demonstrates.** A smoke test — confirms the PyQGIS bindings
+        import and initialise, and prints the running QGIS version.
+
+        **Dependencies.** PyQGIS only (its own headless `QgsApplication`). No data
+        file, no plugin/bridge.
+
+        **How it works.** Initialises `QgsApplication` and reads version info.
+        **▶ Run the cells in order, top to bottom** (this profile does not
+        auto-run on open; or use *Run ▸ Run all cells*).
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo):
     mo.md("""
     # QGIS4 + Marimo
     """)

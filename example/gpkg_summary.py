@@ -29,6 +29,25 @@ def _():
 
 @app.cell
 def _(mo):
+    mo.md(
+        """
+        **What this demonstrates.** A full inventory of a multi-layer GeoPackage
+        (Youngstown NY) — layer list, population trends and road-network length —
+        using headless PyQGIS and Pandas.
+
+        **Dependencies.** PyQGIS (its own headless `QgsApplication`) and `pandas`;
+        the bundled `example/example.gpkg`. No plugin/bridge required.
+
+        **How it works.** Loads `example.gpkg` via `QgsVectorLayer` and pulls
+        features into Pandas. **▶ Run the cells in order, top to bottom** (this
+        profile does not auto-run on open; or use *Run ▸ Run all cells*).
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo):
     mo.md("""
     ## About This Notebook
 

@@ -2253,6 +2253,26 @@ does not connect the bridge).
   **Needs in-QGIS testing**: real render, registry, and `native:buffer` run.
   **Phase 3 completes the HTTP-mode feature set** (§7); next is Phase 4
   (cross-platform + distribution) or Phase 5 (optional in-process mode).
+- 2026-06-10: **Dock UI — Browse tab + New-notebook scaffold.** `MarimoManagerDock`
+  is now tabbed: **Browse** (directory picker remembered via `QgsSettings`, list
+  of `*.py` in that dir, Launch / double-click, **New…**) and **Running** (the
+  session's launched notebooks + Stop). New `plugin/ui/scaffold.py` writes a
+  runnable marimo + QGIS starter (bridge setup with the `qgis_bridge` root
+  injected, layer picker, summarise cell). Verified: compile, ruff, and the
+  generated scaffold passes `marimo check`. Note: the scaffold injects the
+  repo-root path so `import qgis_bridge` works in the dev/symlink layout; once
+  `qgis_bridge` ships on PyPI (Phase 4) that injection is simply unused.
+- 2026-06-10: **Notebook UX + docs pass.** (1) Control layout: stacked controls
+  vertically (`mo.vstack`), `show_value`/`full_width` sliders, `kind="success"`
+  buttons (they were cramped in an `hstack`). (2) Merged each controls "create"
+  and "display" into one cell so the button appears where it's defined. (3) Every
+  notebook + the scaffold now opens with an intro cell — **What this
+  demonstrates / Dependencies / How it works** + a run-order note — with light
+  `### N.` step labels on the interactive bridge notebooks. Rationale: the user's
+  marimo profile sets `auto_instantiate = false`, so notebooks don't run on open;
+  the run-order guidance + "Run all cells" tip prevents the "button doesn't work
+  until you run the cell below" confusion. All pass `marimo check` (only cosmetic
+  markdown-indentation warnings, auto-fixed by marimo's format-on-save).
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 

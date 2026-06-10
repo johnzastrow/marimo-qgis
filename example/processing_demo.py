@@ -27,6 +27,26 @@ def _():
     return (mo,)
 
 
+@app.cell
+def _(mo):
+    mo.md(
+        """
+        **What this demonstrates.** Running QGIS Processing algorithms
+        (reactive buffer/dissolve) and inspecting algorithm parameters and
+        provider capabilities — all headless.
+
+        **Dependencies.** PyQGIS and the `processing` framework (its own headless
+        `QgsApplication`); the bundled `example/example.gpkg`. No plugin/bridge
+        required.
+
+        **How it works.** Calls `processing.run(...)` on layers loaded from
+        `example.gpkg`. **▶ Run the cells in order, top to bottom** (this profile
+        does not auto-run on open; or use *Run ▸ Run all cells*).
+        """
+    )
+    return
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md("""

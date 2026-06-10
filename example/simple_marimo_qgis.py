@@ -41,6 +41,25 @@ def _():
     return (mo,)
 
 
+@app.cell
+def _(mo):
+    mo.md(
+        """
+        **What this demonstrates.** The smallest useful QGIS + marimo notebook —
+        opens a layer from a GeoPackage and shows basic info. Heavily commented as
+        a learning starting point.
+
+        **Dependencies.** PyQGIS (its own headless `QgsApplication`); the bundled
+        `example/example.gpkg`. No plugin/bridge required.
+
+        **How it works.** Initialises a headless `QgsApplication` and loads a
+        layer with `QgsVectorLayer`. **▶ Run the cells in order, top to bottom**
+        (this profile does not auto-run on open; or use *Run ▸ Run all cells*).
+        """
+    )
+    return
+
+
 # ── Cell 2: narrative explanation ────────────────────────────────────────────
 #
 # mo.md() renders a GitHub-flavoured markdown string as the cell's visual

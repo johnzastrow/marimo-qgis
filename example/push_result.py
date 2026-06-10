@@ -1,11 +1,5 @@
 # DO NOT add a PEP 723 `# /// script` block (headless fallback imports PyQGIS).
 # Manage deps via ./qgis-env.sh setup (needs geopandas).
-#
-# Phase 2 bridge demo: read a live layer, buffer it with geopandas, and push the
-# result back into the running QGIS project as a new layer.
-#
-#   LIVE:     click the marimo toolbar button → manager panel → Launch… → this file
-#   HEADLESS: uv run marimo edit example/push_result.py  (no push target)
 
 import marimo
 
@@ -19,6 +13,37 @@ def _():
     import marimo as mo
 
     return (mo,)
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
+        # Push a result back to QGIS
+
+        **What this demonstrates.** Reading a live layer, buffering it with
+        geopandas, previewing it, and pushing the result back into the running
+        QGIS project as a new layer.
+
+        **Dependencies.** The bundled `qgis_bridge` client; a running QGIS with
+        the marimo plugin enabled (live mode); `geopandas`. Without the plugin it
+        falls back to a headless `QgsApplication` (nothing to push into).
+
+        **How it works.** The plugin runs a localhost HTTP bridge; this notebook
+        calls `get_layer` and `insert_layer` over it.
+
+        **▶ Run order** — this profile does not auto-run cells on open. Run them
+        top to bottom (or *Run ▸ Run all cells*): **1)** connect · **2)** pick a
+        layer + distance · **3)** preview · **4)** click Push.
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("### 1. Connect to QGIS — run the next cell")
+    return
 
 
 @app.cell
@@ -44,9 +69,9 @@ def _():
 @app.cell
 def _(mo, mode):
     mo.md(
-        "### 🟢 Live bridge — results can be pushed back to QGIS"
+        "🟢 **Live** — results can be pushed back to QGIS."
         if mode == "live"
-        else "### ⚪ Headless — launch from QGIS to push results into a project"
+        else "⚪ **Headless** — launch from QGIS to push results into a project."
     )
     return
 
@@ -62,25 +87,45 @@ def _(mode, qgis):
 
 
 @app.cell
+def _(mo):
+    mo.md("### 2. Pick a source layer and buffer distance")
+    return
+
+
+@app.cell
 def _(mo, names):
     source = mo.ui.dropdown(
-        options=names, value=names[0] if names else None, label="Source layer"
+        options=names,
+        value=names[0] if names else None,
+        label="Source layer",
+        searchable=True,
+        full_width=True,
     )
     distance = mo.ui.slider(
-        0, 1000, value=50, label="Buffer distance (layer units)"
+        0,
+        1000,
+        value=50,
+        label="Buffer distance (layer units)",
+        show_value=True,
+        full_width=True,
+    )
+
+    (
+        mo.vstack([source, distance], gap=0.75)
+        if names
+        else mo.md("_No live vector layers._")
     )
     return distance, source
 
 
 @app.cell
-def _(distance, mo, names, source):
-    mo.hstack([source, distance]) if names else mo.md("_No live vector layers._")
+def _(mo):
+    mo.md("### 3. Preview the buffered layer")
     return
 
 
 @app.cell
 def _(distance, mo, mode, qgis, source):
-    # Reactive: recompute the buffered GeoDataFrame whenever inputs change.
     buffered = None
     if mode == "live" and source.value:
         src = qgis.get_layer(source.value)
@@ -103,7 +148,13 @@ def _(distance, mo, mode, qgis, source):
 
 @app.cell
 def _(mo):
-    push = mo.ui.run_button(label="⬆ Push buffered layer to QGIS")
+    mo.md("### 4. Push it into QGIS — click the button, result appears below")
+    return
+
+
+@app.cell
+def _(mo):
+    push = mo.ui.run_button(label="⬆ Push buffered layer to QGIS", kind="success")
     push
     return (push,)
 

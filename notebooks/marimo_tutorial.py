@@ -27,6 +27,25 @@ def _():
 
 
 @app.cell
+def _(mo):
+    mo.md(
+        """
+        **What this demonstrates.** A tour of marimo itself — reactivity, UI
+        elements, and the export formats — with **no QGIS dependency**.
+
+        **Dependencies.** `marimo`, `pandas`, `matplotlib` (declared via the
+        PEP 723 header at the top — safe here precisely because this notebook
+        never imports PyQGIS).
+
+        **How it works.** Pure marimo; no bridge or QGIS. **▶ Run the cells in
+        order, top to bottom** (this profile does not auto-run on open; or use
+        *Run ▸ Run all cells*).
+        """
+    )
+    return
+
+
+@app.cell
 def _():
     import pandas as pd
     import matplotlib

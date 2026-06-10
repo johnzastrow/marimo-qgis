@@ -1,17 +1,11 @@
 # DO NOT add a PEP 723 `# /// script` block: in headless fallback this notebook
-# imports PyQGIS, and `uv run` would sandbox it without --system-site-packages,
-# breaking the import. Manage deps via the project venv (./qgis-env.sh setup;
-# the bridge client also needs geopandas).
-#
-# Two ways to run:
-#   - LIVE:     click the marimo toolbar button → manager panel → Launch…
-#               (the plugin injects MARIMO_QGIS_PORT/TOKEN → reads your open project)
-#   - HEADLESS: uv run marimo edit example/live_layers.py
-#               (no plugin → own QgsApplication; no live layers)
+# imports PyQGIS, and uv would sandbox it without --system-site-packages.
+# Manage deps via ./qgis-env.sh setup.
 
 import marimo
 
 __generated_with = "0.23.9"
+
 app = marimo.App()
 
 
@@ -20,6 +14,37 @@ def _():
     import marimo as mo
 
     return (mo,)
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        """
+        # Live QGIS layers
+
+        **What this demonstrates.** Listing the layers in your *running* QGIS
+        project and pulling one into a GeoDataFrame — the simplest read-only use
+        of the bridge.
+
+        **Dependencies.** The bundled `qgis_bridge` client; a running QGIS with
+        the marimo plugin enabled (live mode); `geopandas`. Without the plugin it
+        falls back to a headless `QgsApplication` (no live layers).
+
+        **How it works.** The plugin runs a localhost HTTP bridge; this notebook
+        calls `project`, `list_layers` and `get_layer` over it.
+
+        **▶ Run order** — this profile does not auto-run cells on open. Run them
+        top to bottom (or *Run ▸ Run all cells*): **1)** connect · **2)** pick a
+        layer (it loads as a GeoDataFrame).
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("### 1. Connect to QGIS — run the next cell")
+    return
 
 
 @app.cell
@@ -41,6 +66,7 @@ def _():
     except RuntimeError:
         qgis = HeadlessQGIS()
         mode = "headless"
+
     return mode, qgis
 
 
@@ -50,24 +76,27 @@ def _(mo, mode, qgis):
         _p = qgis.project()
         _title = _p.get("title") or _p.get("file_name") or "(untitled project)"
         _msg = (
-            f"### 🟢 Live bridge\n"
-            f"Connected to QGIS project **{_title}** "
+            f"🟢 **Live** — connected to QGIS project **{_title}** "
             f"({_p.get('layer_count', 0)} layers, CRS `{_p.get('crs', '?')}`)."
         )
     else:
         _msg = (
-            "### ⚪ Headless\n"
-            "No plugin/bridge detected — running an own `QgsApplication`. "
-            "Launch this notebook from QGIS (marimo toolbar button → manager "
-            "panel → Launch…) with a project open to see live layers."
+            "⚪ **Headless** — no plugin/bridge detected (own `QgsApplication`). "
+            "Launch from QGIS (marimo toolbar button → manager panel → Launch…) "
+            "with a project open to see live layers."
         )
     mo.md(_msg)
     return
 
 
 @app.cell
+def _(mo):
+    mo.md("### 2. Pick a vector layer — it loads as a GeoDataFrame below")
+    return
+
+
+@app.cell
 def _(mode, qgis):
-    # Live vector layers available for selection.
     layers = qgis.list_layers() if mode == "live" else []
     names = [layer["name"] for layer in layers if layer.get("type") == "vector"]
     return (names,)
@@ -79,29 +108,27 @@ def _(mo, names):
         options=names,
         value=names[0] if names else None,
         label="Vector layer",
+        searchable=True,
+        full_width=True,
+    )
+    (
+        dropdown
+        if names
+        else mo.md(
+            "_No live vector layers — launch from QGIS with a vector project open._"
+        )
     )
     return (dropdown,)
 
 
 @app.cell
-def _(dropdown, mo, names):
-    dropdown if names else mo.md(
-        "_No live vector layers — launch from QGIS with a vector project open._"
-    )
-    return
-
-
-@app.cell
 def _(dropdown, mo, mode, qgis):
-    # Pull the selected project layer across the bridge as a GeoDataFrame.
     if mode == "live" and dropdown.value:
         gdf = qgis.get_layer(dropdown.value)
         _attrs = gdf.drop(columns=[gdf.geometry.name])
         _out = mo.vstack(
             [
-                mo.md(
-                    f"### `{dropdown.value}` — {len(gdf)} features, CRS `{gdf.crs}`"
-                ),
+                mo.md(f"#### `{dropdown.value}` — {len(gdf)} features, CRS `{gdf.crs}`"),
                 mo.ui.table(_attrs.head(100)),
             ]
         )
