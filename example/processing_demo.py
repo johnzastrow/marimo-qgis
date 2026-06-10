@@ -27,7 +27,7 @@ def _():
     return (mo,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     # QGIS Processing Algorithms in marimo
@@ -50,7 +50,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     import os as _os
     import sys as _sys
@@ -104,7 +104,7 @@ def _():
     return LogFeedback, QgsDistanceArea, QgsProject, QgsVectorLayer, processing
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(QgsVectorLayer):
     import os as _os
 
@@ -124,7 +124,7 @@ def _(QgsVectorLayer):
     return culverts_layer, town_layer
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## Reactive processing — buffer distance
@@ -139,7 +139,7 @@ def _(mo):
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     buffer_distance = mo.ui.slider(
         start=50,
@@ -152,7 +152,7 @@ def _(mo):
     return (buffer_distance,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(LogFeedback, buffer_distance, culverts_layer, processing):
     # native:buffer applies a fixed-distance buffer around every feature.
     # SEGMENTS=8 controls polygon smoothness (more segments = rounder circles).
@@ -177,7 +177,7 @@ def _(LogFeedback, buffer_distance, culverts_layer, processing):
     return buffer_layer, buffer_log
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(LogFeedback, buffer_layer, processing):
     # native:dissolve merges all features into a single polygon.
     # FIELD=[] means dissolve unconditionally (no grouping field).
@@ -198,7 +198,7 @@ def _(LogFeedback, buffer_layer, processing):
     return dissolve_log, dissolved_layer
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(
     QgsDistanceArea,
     QgsProject,
@@ -261,7 +261,7 @@ def _(
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md("""
     ## Running Processing models
