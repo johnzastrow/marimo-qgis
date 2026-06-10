@@ -56,3 +56,40 @@ class QgisBridge:
 
         info = self._client.get("/api/layer/" + quote(name, safe=""))
         return gpd.read_file(info["path"])
+
+    def layer_info(self, name):
+        """Return metadata for a project layer (fields, CRS, extent, geometry)."""
+        return self._client.get("/api/layer-info/" + quote(name, safe=""))
+
+    def get_canvas_extent(self):
+        """Return the current map-canvas extent and CRS (live QGIS only)."""
+        return self._client.get("/api/extent")
+
+    def get_selected_features(self, layer=None):
+        """Return selected features of `layer` (or the active layer) as a GeoDataFrame."""
+        import geopandas as gpd
+
+        path = "/api/selected"
+        if layer:
+            path += "?layer=" + quote(layer, safe="")
+        info = self._client.get(path)
+        return gpd.read_file(info["path"])
+
+    def insert_layer(self, gdf, name="marimo_result"):
+        """Push a GeoDataFrame into the live QGIS project as a new memory layer.
+
+        Returns the new layer's id/name/feature_count. The GeoDataFrame is sent
+        as FlatGeobuf bytes (the plugin owns the file path it writes; see D6).
+        """
+        import os
+        import tempfile
+
+        fd, tmp = tempfile.mkstemp(suffix=".fgb")
+        os.close(fd)
+        try:
+            gdf.to_file(tmp, driver="FlatGeobuf")
+            with open(tmp, "rb") as handle:
+                data = handle.read()
+        finally:
+            os.unlink(tmp)
+        return self._client.post("/api/insert?name=" + quote(name, safe=""), data)

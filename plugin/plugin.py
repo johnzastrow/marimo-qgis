@@ -58,8 +58,9 @@ class MarimoLauncherPlugin:
 
             self._temp = TempStore()
             # The API QObject is created on the main thread (initGui runs there)
-            # and parented to nothing — we hold the only reference.
-            self._api = QGISBridgeAPI(self._temp)
+            # and parented to nothing — we hold the only reference. iface is
+            # passed so canvas_extent / selected_features can reach the desktop.
+            self._api = QGISBridgeAPI(self._temp, iface=self.iface)
             self._server = QgisBridgeServer(self._api).start()
             runtime.set_server(self._server)
             _log(f"bridge listening on 127.0.0.1:{self._server.port}")

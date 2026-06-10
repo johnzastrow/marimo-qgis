@@ -24,7 +24,15 @@ class Client:
 
     def get(self, path):
         """GET `path`, return the parsed JSON body, or raise BridgeError."""
-        req = urllib.request.Request(self._base + path)
+        return self._send(urllib.request.Request(self._base + path))
+
+    def post(self, path, data, content_type="application/octet-stream"):
+        """POST raw bytes to `path`, return the parsed JSON body."""
+        req = urllib.request.Request(self._base + path, data=data, method="POST")
+        req.add_header("Content-Type", content_type)
+        return self._send(req)
+
+    def _send(self, req):
         req.add_header("Authorization", "Bearer " + self._token)
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:

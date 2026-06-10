@@ -10,7 +10,17 @@ main thread via `QMetaObject.invokeMethod(..., BlockingQueuedConnection)`, under
 a lock so the single result slot on QGISBridgeAPI is concurrency-safe.
 
 Security (D2): binds 127.0.0.1 only; every request must present the Bearer token;
-unknown routes 404; missing/invalid token 401; errors return a generic message.
+unknown routes 404; missing/invalid token 401; errors return a generic message;
+POST bodies are size-bounded.
+
+Routes (Phase 1 + 2):
+    GET  /api/project              project_state
+    GET  /api/layers               list_layers
+    GET  /api/layer/<name>         get_layer (vector -> FlatGeobuf path)
+    GET  /api/layer-info/<name>    get_layer_info
+    GET  /api/extent               canvas_extent      (needs iface)
+    GET  /api/selected[?layer=]    selected_features  (needs iface)
+    POST /api/insert?name=<name>   insert_layer (body = FlatGeobuf bytes)
 
 The HTTP handler depends only on `bridge.auth` and `bridge.call_api`, so the
 routing/auth layer is unit-testable without a running QGIS (the Qt import is
@@ -20,26 +30,33 @@ deferred to `call_api`).
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .auth import TokenAuth
 
+# Hard cap on a POST body, mirrored from api.MAX_INSERT_BYTES (kept local so the
+# server can reject oversized uploads before reading them into memory).
+MAX_BODY_BYTES = 256 * 1024 * 1024
 
-def route(path):
-    """Map a URL path to a request dict, or None if no route matches.
 
-    Phase 1 (GET only):
-        /api/project          -> project_state
-        /api/layers           -> list_layers
-        /api/layer/<name>     -> get_layer(name)
-    """
-    parts = [p for p in path.split("/") if p]
+def route_get(raw_path):
+    """Map a GET path (with optional query) to a request dict, or None."""
+    parsed = urlparse(raw_path)
+    parts = [p for p in parsed.path.split("/") if p]
+    query = parse_qs(parsed.query)
+
     if parts == ["api", "project"]:
         return {"method": "project_state"}
     if parts == ["api", "layers"]:
         return {"method": "list_layers"}
+    if parts == ["api", "extent"]:
+        return {"method": "canvas_extent"}
+    if parts == ["api", "selected"]:
+        return {"method": "selected_features", "name": query.get("layer", [""])[0]}
     if len(parts) == 3 and parts[0] == "api" and parts[1] == "layer":
         return {"method": "get_layer", "name": unquote(parts[2])}
+    if len(parts) == 3 and parts[0] == "api" and parts[1] == "layer-info":
+        return {"method": "get_layer_info", "name": unquote(parts[2])}
     return None
 
 
@@ -62,22 +79,51 @@ def make_handler(bridge):
             self.end_headers()
             self.wfile.write(body)
 
-        def do_GET(self):
-            # Auth first — fail closed on any deviation.
-            if not bridge.auth.authorize(self.headers.get("Authorization")):
-                self._send_json(401, {"error": "unauthorized"})
-                return
+        def _authorized(self):
+            if bridge.auth.authorize(self.headers.get("Authorization")):
+                return True
+            self._send_json(401, {"error": "unauthorized"})
+            return False
 
-            request = route(urlparse(self.path).path)
+        def _respond(self, result):
+            if isinstance(result, dict) and "_error" in result:
+                self._send_json(result.get("_status", 500), {"error": result["_error"]})
+            else:
+                self._send_json(200, result)
+
+        def do_GET(self):
+            if not self._authorized():
+                return
+            request = route_get(self.path)
             if request is None:
                 self._send_json(404, {"error": "unknown endpoint"})
                 return
+            self._respond(bridge.call_api(request))
 
-            result = bridge.call_api(request)
-            if isinstance(result, dict) and "_error" in result:
-                self._send_json(result.get("_status", 500), {"error": result["_error"]})
+        def do_POST(self):
+            if not self._authorized():
                 return
-            self._send_json(200, result)
+            parsed = urlparse(self.path)
+            parts = [p for p in parsed.path.split("/") if p]
+            if parts != ["api", "insert"]:
+                self._send_json(404, {"error": "unknown endpoint"})
+                return
+
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length <= 0:
+                self._send_json(400, {"error": "empty body"})
+                return
+            if length > MAX_BODY_BYTES:
+                self._send_json(413, {"error": "payload too large"})
+                return
+
+            data = self.rfile.read(length)
+            name = parse_qs(parsed.query).get("name", [""])[0]
+            self._respond(
+                bridge.call_api(
+                    {"method": "insert_layer", "name": unquote(name), "data": data}
+                )
+            )
 
     return _Handler
 

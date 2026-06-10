@@ -12,7 +12,6 @@
 import marimo
 
 __generated_with = "0.23.9"
-
 app = marimo.App()
 
 
@@ -42,7 +41,6 @@ def _():
     except RuntimeError:
         qgis = HeadlessQGIS()
         mode = "headless"
-
     return mode, qgis
 
 

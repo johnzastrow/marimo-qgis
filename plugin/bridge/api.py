@@ -5,18 +5,28 @@ handlers directly; it marshals each request here via
 `QMetaObject.invokeMethod(..., BlockingQueuedConnection)` so every QGIS call runs
 on the thread that owns the Qt/QGIS objects (see PLANNING.md §6, D3, D4).
 
-Phase 1 methods: project_state, list_layers, get_layer (vector -> FlatGeobuf).
+Phase 1: project_state, list_layers, get_layer (vector -> FlatGeobuf).
+Phase 2: get_layer_info, insert_layer, canvas_extent, selected_features.
+
+`canvas_extent` and `selected_features` need `iface` (the QGIS desktop); when the
+bridge runs without it (standalone/headless server, Phase 4) they return 503.
 """
 
 from qgis.PyQt.QtCore import QObject, pyqtSlot
 from qgis.core import (
     Qgis,
     QgsApplication,
+    QgsFeatureRequest,
     QgsProject,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 
 from .convert import layer_to_fgb
+
+# Upper bound on an uploaded layer body (D2: bound everything). 256 MiB of
+# FlatGeobuf is a very large vector layer for interactive analysis.
+MAX_INSERT_BYTES = 256 * 1024 * 1024
 
 
 def _log(message, level="info"):
@@ -43,9 +53,10 @@ class ApiError(Exception):
 class QGISBridgeAPI(QObject):
     """All QGIS reads/writes for the bridge. Main-thread only."""
 
-    def __init__(self, temp_store, parent=None):
+    def __init__(self, temp_store, iface=None, parent=None):
         super().__init__(parent)
         self._temp = temp_store
+        self._iface = iface
         self._result = None
 
     # ---- main-thread entry point (called via invokeMethod) ---------------
@@ -66,7 +77,7 @@ class QGISBridgeAPI(QObject):
         except ApiError as exc:
             self._result = {"_error": exc.message, "_status": exc.status}
         except Exception as exc:  # noqa: BLE001 — last-resort guard, must not propagate
-            _log(f"dispatch error on {request!r}: {exc!r}", "error")
+            _log(f"dispatch error on {request.get('method')!r}: {exc!r}", "error")
             self._result = {"_error": "internal error", "_status": 500}
 
     def take_result(self):
@@ -84,7 +95,17 @@ class QGISBridgeAPI(QObject):
             return self._list_layers()
         if method == "get_layer":
             return self._get_layer(request.get("name", ""))
+        if method == "get_layer_info":
+            return self._get_layer_info(request.get("name", ""))
+        if method == "insert_layer":
+            return self._insert_layer(request.get("name", ""), request.get("data"))
+        if method == "canvas_extent":
+            return self._canvas_extent()
+        if method == "selected_features":
+            return self._selected_features(request.get("name", ""))
         raise ApiError(404, "unknown method")
+
+    # ---- read handlers ---------------------------------------------------
 
     def _project_state(self):
         project = QgsProject.instance()
@@ -111,12 +132,7 @@ class QGISBridgeAPI(QObject):
         return {"layers": layers}
 
     def _get_layer(self, name):
-        if not name:
-            raise ApiError(400, "missing layer name")
-        layer = self._find_vector_layer(name)
-        if layer is None:
-            # 404 whether the name is unknown or non-vector — don't leak which.
-            raise ApiError(404, "layer not found")
+        layer = self._require_vector_layer(name)
         path = self._temp.new_path(".fgb")
         try:
             layer_to_fgb(layer, path)
@@ -124,6 +140,103 @@ class QGISBridgeAPI(QObject):
             _log(f"export failed for layer {name!r}: {exc!r}", "error")
             raise ApiError(500, "layer export failed")
         return {"path": path, "format": "FlatGeobuf", "name": layer.name()}
+
+    def _get_layer_info(self, name):
+        layer = self._require_vector_layer(name)
+        ext = layer.extent()
+        return {
+            "name": layer.name(),
+            "crs": layer.crs().authid(),
+            "feature_count": layer.featureCount(),
+            "geometry_type": QgsWkbTypes.displayString(layer.wkbType()),
+            "fields": [
+                {"name": f.name(), "type": f.typeName()} for f in layer.fields()
+            ],
+            "extent": {
+                "xmin": ext.xMinimum(),
+                "ymin": ext.yMinimum(),
+                "xmax": ext.xMaximum(),
+                "ymax": ext.yMaximum(),
+            },
+        }
+
+    def _canvas_extent(self):
+        canvas = self._require_iface().mapCanvas()
+        ext = canvas.extent()
+        return {
+            "xmin": ext.xMinimum(),
+            "ymin": ext.yMinimum(),
+            "xmax": ext.xMaximum(),
+            "ymax": ext.yMaximum(),
+            "crs": canvas.mapSettings().destinationCrs().authid(),
+        }
+
+    def _selected_features(self, name):
+        iface = self._require_iface()
+        layer = self._find_vector_layer(name) if name else iface.activeLayer()
+        if not isinstance(layer, QgsVectorLayer):
+            raise ApiError(404, "no vector layer (name not found or none active)")
+        fids = layer.selectedFeatureIds()
+        if not fids:
+            raise ApiError(404, "no features selected")
+        subset = layer.materialize(QgsFeatureRequest().setFilterFids(fids))
+        path = self._temp.new_path(".fgb")
+        layer_to_fgb(subset, path)
+        return {
+            "path": path,
+            "format": "FlatGeobuf",
+            "name": layer.name(),
+            "count": len(fids),
+        }
+
+    # ---- write handler ---------------------------------------------------
+
+    def _insert_layer(self, name, data):
+        """Add an uploaded vector layer (FlatGeobuf bytes) to the project.
+
+        The client uploads the layer bytes (D6) — the plugin writes them into
+        its own private temp dir, never opening a client-supplied path. The
+        features are copied into a memory layer so the project layer does not
+        depend on the temp file (which is cleaned up on unload).
+        """
+        if not data:
+            raise ApiError(400, "missing layer data")
+        if len(data) > MAX_INSERT_BYTES:
+            raise ApiError(413, "layer too large")
+        name = name or "marimo_result"
+
+        path = self._temp.new_path(".fgb")
+        with open(path, "wb") as handle:
+            handle.write(data)
+
+        source = QgsVectorLayer(path, name, "ogr")
+        if not source.isValid():
+            raise ApiError(400, "uploaded data is not a valid vector layer")
+
+        layer = source.materialize(QgsFeatureRequest())
+        layer.setName(name)
+        QgsProject.instance().addMapLayer(layer)
+        return {
+            "id": layer.id(),
+            "name": layer.name(),
+            "feature_count": layer.featureCount(),
+        }
+
+    # ---- helpers ---------------------------------------------------------
+
+    def _require_iface(self):
+        if self._iface is None:
+            raise ApiError(503, "operation requires the QGIS desktop (no iface)")
+        return self._iface
+
+    def _require_vector_layer(self, name):
+        if not name:
+            raise ApiError(400, "missing layer name")
+        layer = self._find_vector_layer(name)
+        if layer is None:
+            # 404 whether the name is unknown or non-vector — don't leak which.
+            raise ApiError(404, "layer not found")
+        return layer
 
     @staticmethod
     def _find_vector_layer(name):

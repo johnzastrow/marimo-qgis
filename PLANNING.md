@@ -2133,6 +2133,17 @@ imports PyQGIS (a GPL library) and the sibling `qgis-light` project is GPLv3, so
 GPLv3 is the ecosystem-consistent choice. Added a canonical GPLv3 `LICENSE` at the
 repo root (closes G2) and updated the README License section MIT → GPLv3.
 
+**D6 — `insert_layer` uploads bytes; the plugin never opens a client path.**
+The §6 dispatch-table sketch had `insert_layer` "read a temp file". For security
+(D2) the client instead POSTs the FlatGeobuf **bytes** to `/api/insert`; the
+plugin writes them into its own private 0700 temp dir, so it never opens an
+arbitrary path supplied by the (authenticated) client. The body is size-bounded
+(`MAX_INSERT_BYTES` = 256 MiB → HTTP 413). The uploaded features are copied into
+a **memory layer** via `QgsVectorLayer.materialize()` before `addMapLayer`, so the
+project layer has no dependency on the temp file (which is cleaned up on unload).
+`canvas_extent` / `selected_features` require `iface` (passed from the plugin);
+without it they return 503 (relevant to the Phase 4 standalone server).
+
 ### 8.5 Change log
 
 - 2026-06-10: Closed **G2** (added GPLv3 `LICENSE`), **G3** (Makefile now copies
@@ -2183,6 +2194,17 @@ repo root (closes G2) and updated the README License section MIT → GPLv3.
   (`bridge/`, `ui/`) — a copied/old plugin silently runs pre-bridge code and the
   notebook falls back to headless. `qgis-env.sh setup` must have run since
   `geopandas` was added, or `get_layer` raises `ModuleNotFoundError`.
+- 2026-06-10: **Phase 2a (bridge data extensions) built.** Bridge gained
+  `get_layer_info`, `insert_layer` (D6: bytes upload → memory layer →
+  addMapLayer), `canvas_extent`, `selected_features` (last two need `iface`, now
+  passed from plugin.py). server.py gained `do_POST` (`/api/insert`, bounded body)
+  + GET `/api/extent`, `/api/selected?layer=`, `/api/layer-info/<name>`. Client
+  gained `layer_info`, `get_canvas_extent`, `get_selected_features`,
+  `insert_layer`. Examples: `push_result.py` (buffer → push back),
+  `selection_analysis.py` (selection + extent). Verified w/o QGIS (compile, ruff,
+  marimo check, full HTTP surface incl. POST size/empty/auth/bogus). **Needs
+  in-QGIS testing**: insert/extent/selected against a real project + selection.
+  Remaining Phase 2: **2b** = dock widget + raster `get_layer`.
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 
