@@ -3,9 +3,9 @@
 # QGIS calls classFactory(iface) when the plugin is loaded.  It must return
 # an object with initGui() and unload() methods.
 #
-# Installation (Linux):
+# Installation (Linux, QGIS 4):
 #   ln -s /path/to/marimo_qgis/plugin \
-#         ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/marimo_launcher
+#         ~/.local/share/QGIS/QGIS4/profiles/default/python/plugins/marimo_launcher
 #   Then: Plugins ▸ Manage and Install Plugins ▸ Installed ▸ enable "marimo Launcher"
 #
 # The symlink name (marimo_launcher) becomes the Python package name QGIS uses

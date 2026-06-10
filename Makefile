@@ -11,11 +11,15 @@ help:
 
 package: clean
 	mkdir -p $(PLUGIN_NAME)
-	cp $(PLUGIN_SRC)/__init__.py  $(PLUGIN_NAME)/
-	cp $(PLUGIN_SRC)/metadata.txt $(PLUGIN_NAME)/
-	cp $(PLUGIN_SRC)/plugin.py    $(PLUGIN_NAME)/
-	cp $(PLUGIN_SRC)/provider.py  $(PLUGIN_NAME)/
-	cp $(PLUGIN_SRC)/algorithm.py $(PLUGIN_NAME)/
+	# Copy the entire plugin source tree so new sub-packages (bridge/, ui/, ...)
+	# are included automatically — never enumerate files by hand, or they get
+	# silently dropped from the zip and the installed plugin breaks on import.
+	cp -r $(PLUGIN_SRC)/. $(PLUGIN_NAME)/
+	# Bundle the LICENSE — required for publication on plugins.qgis.org.
+	cp LICENSE $(PLUGIN_NAME)/
+	# Strip Python caches that may have been copied in.
+	find $(PLUGIN_NAME) -name '__pycache__' -type d -prune -exec rm -rf {} +
+	find $(PLUGIN_NAME) -name '*.pyc' -delete
 	zip -r $(ZIP_FILE) $(PLUGIN_NAME)/
 	rm -rf $(PLUGIN_NAME)
 	@echo "Built $(ZIP_FILE) — install via QGIS: Plugins ▸ Install from ZIP"

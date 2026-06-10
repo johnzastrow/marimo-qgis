@@ -446,4 +446,8 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for documented issues including:
 
 ## License
 
-MIT
+GNU General Public License v3.0 — see [LICENSE](LICENSE).
+
+Copyright (C) 2026 John Zastrow. GPLv3 is used for consistency with the QGIS
+ecosystem: this plugin imports PyQGIS (a GPL library), and the sibling
+`qgis-light` project is GPLv3 as well.

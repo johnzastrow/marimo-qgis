@@ -2069,3 +2069,136 @@ def _():
    directly via `Q_RETURN_ARG` rather than a side-channel attribute. Must be resolved
    before Phase 5 ships. Not relevant for HTTP (each HTTP request has its own
    response object).
+
+---
+
+## 8. Build Decisions & QGIS 4 Plugin Review
+
+Running implementation log, appended as work proceeds. Newest entries at the
+bottom. Started 2026-06-10.
+
+### 8.1 Decisions
+
+**D1 — HTTP transport: Python stdlib `http.server`, not aiohttp.**
+The bridge server runs inside QGIS's own Python interpreter. aiohttp is a
+third-party package QGIS does not ship, so requiring it would force users to
+`pip install aiohttp` into QGIS's interpreter — exactly the
+dependency-into-QGIS fragility this project has spent effort eliminating (see
+§1, the Python-version-pinning problem). `http.server.ThreadingHTTPServer` is in
+the standard library, needs zero installation, and runs anywhere QGIS runs. The
+Qt-main-thread dispatch mechanism (`QMetaObject.invokeMethod`,
+`BlockingQueuedConnection`) is identical regardless of HTTP library, so nothing
+in the architecture (§6) changes except the server class. The client
+(`qgis_bridge`) likewise uses stdlib `urllib.request` instead of `requests`.
+Trade-off accepted: manual routing and a thread-per-request model instead of
+async; fine for a localhost control plane with light concurrency.
+*Supersedes the "aiohttp" choice in §3 and the file list in §6 for the server
+layer only.*
+
+**D2 — Bridge security posture (applies to all phases).**
+- Bind **`127.0.0.1` only** (never `0.0.0.0`), on an OS-assigned ephemeral port
+  (`bind to :0`, read back the actual port).
+- **Bearer token auth**: a high-entropy token (`secrets.token_urlsafe`) minted at
+  server start, injected into the notebook subprocess via `MARIMO_QGIS_TOKEN`,
+  required on **every** request as `Authorization: Bearer <token>`, compared with
+  `hmac.compare_digest` (constant-time). Missing/wrong token → `401`, fail closed.
+- `get_layer/{name}` and `get_layer_info/{name}` resolve `{name}` **against
+  `QgsProject` layer names only** — client input is never used as a filesystem
+  path, so there is no path-traversal surface. Unknown layer → `404`.
+- Temp files for layer transfer live in a per-server `mkdtemp()` directory (mode
+  0700), with unguessable names, **tracked and deleted on plugin unload**.
+- Generic error messages to the client; full detail to the QGIS log only.
+- Bounds, not wildcards: size/feature caps on transfers (Phase 2+), no unbounded
+  responses.
+
+**D3 — Qt compatibility: `qgis.PyQt` shim + fully-scoped enums.**
+All bridge Qt imports go through `qgis.PyQt.*` (e.g.
+`from qgis.PyQt.QtCore import QObject, QMetaObject, Qt, pyqtSlot`), never direct
+`PyQt6`. Enums are written fully scoped
+(`Qt.ConnectionType.BlockingQueuedConnection`, not `Qt.BlockingQueuedConnection`).
+This is the QGIS-4-recommended pattern and keeps a single codebase working on Qt5
+(QGIS 3.22+) and Qt6 (QGIS 4). Mirrors the approach already used in the
+qgis-light sibling project.
+
+**D4 — Concurrency: serialize bridge dispatch with a lock.**
+The §5/§7 open issue #7 (race on `QGISBridgeAPI.result`) is resolved for the HTTP
+path by wrapping `invokeMethod(...BlockingQueuedConnection)` + result read in a
+single `threading.Lock` on the server side. `ThreadingHTTPServer` gives each
+request its own thread; the lock makes the shared result attribute safe and
+matches the "HTTP serialises naturally" note in §3. (The `Q_RETURN_ARG`
+alternative is unreliable in PyQt.)
+
+**D5 — License: GPLv3.** The README previously declared MIT, but this plugin
+imports PyQGIS (a GPL library) and the sibling `qgis-light` project is GPLv3, so
+GPLv3 is the ecosystem-consistent choice. Added a canonical GPLv3 `LICENSE` at the
+repo root (closes G2) and updated the README License section MIT → GPLv3.
+
+### 8.5 Change log
+
+- 2026-06-10: Closed **G2** (added GPLv3 `LICENSE`), **G3** (Makefile now copies
+  the whole `plugin/` tree + `LICENSE`, so new sub-packages can't be dropped from
+  the zip), **G4** (`__init__.py` install comment → QGIS4 path). Still open: **G1**
+  (empty `email` in `metadata.txt` — needs a public contact address, left to the
+  author), **G5** (`category=Analysis` is non-standard — defer).
+- 2026-06-10: **Phase 1 bridge core built** — `plugin/bridge/{auth,convert,api,
+  server}.py` (+ import-light `__init__.py`). Implements project_state,
+  list_layers, get_layer (vector → FlatGeobuf) per D1–D4. The stdlib HTTP/auth/
+  routing layer is unit-tested end-to-end without QGIS (401 fail-closed on
+  missing/wrong token; 200 + JSON on valid; 404 on unknown layer/route;
+  127.0.0.1-only bind; URL-decoded names). `api.py`/`convert.py` need a live QGIS
+  to exercise (Processing + QgsProject); deferred to in-QGIS testing.
+  Still to do for Phase 1: plugin lifecycle wiring (start/stop server in
+  plugin.py), `MarimoProcessManager` env injection, the `qgis_bridge` client
+  package, and `example/live_layers.py`.
+
+### 8.2 QGIS 4 plugin requirements (from official sources)
+
+- **Mandatory files:** `metadata.txt`, `__init__.py` (with `classFactory(iface)`),
+  and **`LICENSE`** (plain text, no extension) — `LICENSE` is required for
+  publication on plugins.qgis.org.
+- **Mandatory `metadata.txt` fields:** `name`, `email`, `author`,
+  `qgisMinimumVersion`, `description`. UTF-8, INI format (ConfigParser/QSettings).
+- **Recommended fields:** `version`, `about`, `tracker`, `repository`, `homepage`,
+  `tags`, `category` (allowed values: **Vector, Raster, Database, Web**),
+  `changelog`, `icon`, `experimental`, `deprecated`.
+- **QGIS 4 readiness:** set `qgisMaximumVersion=4.99` to appear in the "QGIS 4
+  Ready" list. The old `supportsQt6=True` flag is **removed** — do not use it.
+- **QGIS 3 + 4 from one codebase:** `qgisMinimumVersion=3.22`,
+  `qgisMaximumVersion=4.99`, import only via `qgis.PyQt`, replace any Qt5-only
+  deprecated APIs with Qt6 equivalents.
+- **Lifecycle:** `classFactory(iface)` → object exposing `initGui()` (set up UI /
+  signals on the main thread) and `unload()` (tear everything down — remove
+  providers, disconnect signals, stop threads, free resources). With
+  `hasProcessingProvider=yes`, QGIS also calls `initProcessing()` before
+  `initGui()`.
+- **Threading:** never touch the QGIS/Qt API from a background thread; long work
+  belongs on a `QgsTask` (or, for us, marshalled to the main thread via
+  `invokeMethod`) so the GUI never blocks.
+
+### 8.3 Compliance gaps in the current `plugin/` (action items)
+
+| # | Gap | Impact | Fix |
+|---|-----|--------|-----|
+| G1 | `metadata.txt` `email=` is **empty** | `email` is mandatory; blocks publishing | Fill author email |
+| G2 | **No `LICENSE`** file (repo root or `plugin/`) | Mandatory for publication; not in the zip | Add `LICENSE`; copy into the packaged plugin |
+| G3 | **Makefile copies 5 files by name**, not recursively | Adding `bridge/` and `ui/` packages → they're silently omitted from the zip → broken install | Package the whole `plugin/` tree (e.g. `rsync`/`cp -r` with excludes) + include `LICENSE` |
+| G4 | `__init__.py` install comment says `QGIS3` path | Misleading on QGIS 4 (`QGIS4` profile dir) | Update comment to QGIS4 |
+| G5 | `category=Analysis` | Not one of Vector/Raster/Database/Web | Use an allowed category (or drop — minor for a Processing-provider plugin) |
+
+### 8.4 Best practices to apply in the bridge build
+
+- Start the server in `initGui()` (main thread); in `unload()` call
+  `server.shutdown()` from another thread and **join** it, then delete the temp
+  dir — so QGIS plugin reload/disable does not leak a listening socket or thread.
+- Keep `QGISBridgeAPI` strictly on the Qt main thread; the only cross-thread call
+  is `invokeMethod(...BlockingQueuedConnection)`. Heavy exports may briefly block
+  the GUI thread — acceptable for Phase 1; revisit with `QgsTask` if it bites.
+- `qgis_bridge` (client) stays **QGIS-free**: stdlib `urllib` + `geopandas` only,
+  so it installs into any notebook venv.
+
+### Sources
+
+- [Structuring Python Plugins — PyQGIS Developer Cookbook](https://docs.qgis.org/3.44/en/docs/pyqgis_developer_cookbook/plugins/plugins.html)
+- [Migrate Your Plugin to QGIS 4 — plugins.qgis.org](https://plugins.qgis.org/docs/migrate-qgis4/)
+- [Releasing your plugin — PyQGIS Developer Cookbook](https://docs.qgis.org/testing/en/docs/pyqgis_developer_cookbook/plugins/releasing.html)
+- [QGIS 4 Ready Plugins — QGIS Python Plugins Repository](https://plugins.qgis.org/plugins/new_qgis_ready/)
