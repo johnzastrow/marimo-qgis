@@ -35,6 +35,8 @@ class MarimoLauncherPlugin:
         self._temp = None
         self._api = None
         self._server = None
+        self._pm = None
+        self._dock = None
 
     def initProcessing(self):
         """Register the marimo Processing provider with QGIS."""
@@ -46,6 +48,31 @@ class MarimoLauncherPlugin:
         # calls before initGui() when hasProcessingProvider=yes.
         self.initProcessing()
         self._start_bridge()
+        self._add_dock()
+
+    def _add_dock(self):
+        """Add the notebook-manager dock (fail-safe — never break plugin load)."""
+        try:
+            from qgis.PyQt.QtCore import Qt
+
+            from .ui.dock import MarimoManagerDock
+            from .ui.process import MarimoProcessManager
+
+            self._pm = MarimoProcessManager()
+            self._dock = MarimoManagerDock(self._pm, self._server)
+            self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
+        except Exception as exc:  # noqa: BLE001
+            _log(f"dock failed to load: {exc!r}", "error")
+
+    def _remove_dock(self):
+        if self._dock is not None:
+            try:
+                self.iface.removeDockWidget(self._dock)
+                self._dock.deleteLater()
+            except Exception as exc:  # noqa: BLE001
+                _log(f"dock removal error: {exc!r}", "warning")
+            self._dock = None
+        self._pm = None
 
     def _start_bridge(self):
         """Start the HTTP bridge server on the Qt main thread (fail-safe)."""
@@ -83,7 +110,8 @@ class MarimoLauncherPlugin:
             self._temp = None
 
     def unload(self):
-        """Remove the provider and tear down the bridge."""
+        """Remove the dock + provider and tear down the bridge."""
+        self._remove_dock()
         self._stop_bridge()
         if self.provider is not None:
             QgsApplication.processingRegistry().removeProvider(self.provider)

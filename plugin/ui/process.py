@@ -1,4 +1,4 @@
-"""MarimoProcessManager — launches marimo notebooks as detached subprocesses.
+"""MarimoProcessManager — launches and tracks marimo notebook subprocesses.
 
 Each notebook runs in its own OS process (crash isolation via
 `start_new_session=True`, so a runaway cell cannot take QGIS down). The bridge
@@ -6,8 +6,8 @@ connection (`MARIMO_QGIS_PORT` / `MARIMO_QGIS_TOKEN`) is injected into the
 subprocess environment so the notebook's `qgis_bridge.QgisBridge()` can reach the
 live QGIS project.
 
-This is the programmatic launch path (used by the Phase 2 dock widget). The
-Processing "Launch marimo notebook" algorithm performs the same env injection via
+This is the programmatic launch path used by the dock widget. The Processing
+"Launch marimo notebook" algorithm performs the same env injection via
 `plugin.runtime.bridge_env()`.
 """
 
@@ -18,10 +18,11 @@ from ..runtime import bridge_env
 
 
 class MarimoProcessManager:
-    """Launches and tracks marimo notebook subprocesses."""
+    """Launches marimo notebooks and tracks the live subprocesses."""
 
     def __init__(self):
-        self._procs = []
+        # Each record: {"path": str, "mode": str, "proc": Popen}
+        self._records = []
 
     def launch(self, notebook_path, mode="edit", cwd=None):
         """Launch `marimo <mode> <notebook_path>` with the bridge env injected.
@@ -43,13 +44,23 @@ class MarimoProcessManager:
             env=env,
             start_new_session=True,  # crash isolation: own process group
         )
-        self._procs.append(proc)
+        self._records.append({"path": notebook_path, "mode": mode, "proc": proc})
         return proc
 
-    def processes(self):
-        """Return the list of launched Popen handles (for a future dock UI)."""
-        return list(self._procs)
+    def running(self):
+        """Return records for still-running notebooks (prunes exited ones)."""
+        self._records = [r for r in self._records if r["proc"].poll() is None]
+        return list(self._records)
 
-    def forget(self):
-        """Stop tracking detached notebooks (they keep running; the user owns them)."""
-        self._procs = []
+    def stop(self, proc):
+        """Terminate one launched notebook process group (best effort)."""
+        try:
+            proc.terminate()
+        except Exception:  # noqa: BLE001 — process may already be gone
+            pass
+
+    def stop_all(self):
+        """Terminate every tracked notebook (used only if explicitly requested)."""
+        for record in self._records:
+            self.stop(record["proc"])
+        self._records = []

@@ -57,3 +57,17 @@ def layer_to_fgb(layer, path):
     if not os.path.exists(path):
         raise RuntimeError("native:savefeatures produced no output file")
     return path
+
+
+def raster_to_tif(layer, path):
+    """Export a raster layer to GeoTIFF at `path` using gdal:translate.
+
+    MUST run on the Qt main thread. Returns `path`; raises RuntimeError on
+    failure. The client reads the result with rioxarray.
+    """
+    import processing  # imported lazily; only available inside QGIS
+
+    processing.run("gdal:translate", {"INPUT": layer, "OUTPUT": path})
+    if not os.path.exists(path):
+        raise RuntimeError("gdal:translate produced no output file")
+    return path

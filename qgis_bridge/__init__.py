@@ -51,10 +51,22 @@ class QgisBridge:
         return self._client.get("/api/layers")["layers"]
 
     def get_layer(self, name):
-        """Return a project vector layer (resolved by name) as a GeoDataFrame."""
+        """Return a project layer (resolved by name) from the live project.
+
+        Vector layers come back as a GeoDataFrame (geopandas); raster layers as
+        an xarray DataArray (rioxarray, an optional dependency).
+        """
+        info = self._client.get("/api/layer/" + quote(name, safe=""))
+        if info.get("format") == "GeoTIFF":
+            try:
+                import rioxarray
+            except ImportError:
+                raise BridgeError(
+                    "reading raster layers needs rioxarray (pip install rioxarray)"
+                ) from None
+            return rioxarray.open_rasterio(info["path"])
         import geopandas as gpd
 
-        info = self._client.get("/api/layer/" + quote(name, safe=""))
         return gpd.read_file(info["path"])
 
     def layer_info(self, name):

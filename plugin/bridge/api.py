@@ -18,11 +18,12 @@ from qgis.core import (
     QgsApplication,
     QgsFeatureRequest,
     QgsProject,
+    QgsRasterLayer,
     QgsVectorLayer,
     QgsWkbTypes,
 )
 
-from .convert import layer_to_fgb
+from .convert import layer_to_fgb, raster_to_tif
 
 # Upper bound on an uploaded layer body (D2: bound everything). 256 MiB of
 # FlatGeobuf is a very large vector layer for interactive analysis.
@@ -132,14 +133,24 @@ class QGISBridgeAPI(QObject):
         return {"layers": layers}
 
     def _get_layer(self, name):
-        layer = self._require_vector_layer(name)
-        path = self._temp.new_path(".fgb")
+        if not name:
+            raise ApiError(400, "missing layer name")
+        layer = self._find_layer(name)
+        if layer is None:
+            raise ApiError(404, "layer not found")
         try:
-            layer_to_fgb(layer, path)
+            if isinstance(layer, QgsVectorLayer):
+                path = self._temp.new_path(".fgb")
+                layer_to_fgb(layer, path)
+                return {"path": path, "format": "FlatGeobuf", "name": layer.name()}
+            if isinstance(layer, QgsRasterLayer):
+                path = self._temp.new_path(".tif")
+                raster_to_tif(layer, path)
+                return {"path": path, "format": "GeoTIFF", "name": layer.name()}
         except Exception as exc:  # noqa: BLE001
             _log(f"export failed for layer {name!r}: {exc!r}", "error")
             raise ApiError(500, "layer export failed")
-        return {"path": path, "format": "FlatGeobuf", "name": layer.name()}
+        raise ApiError(404, "unsupported layer type")
 
     def _get_layer_info(self, name):
         layer = self._require_vector_layer(name)
@@ -248,5 +259,17 @@ class QGISBridgeAPI(QObject):
         target = name.strip().lower()
         for layer in QgsProject.instance().mapLayers().values():
             if isinstance(layer, QgsVectorLayer) and layer.name().lower() == target:
+                return layer
+        return None
+
+    @staticmethod
+    def _find_layer(name):
+        """Resolve a layer NAME (case-insensitive, first match), any type.
+
+        Name-only matching against the project — never a filesystem path (D2).
+        """
+        target = name.strip().lower()
+        for layer in QgsProject.instance().mapLayers().values():
+            if layer.name().lower() == target:
                 return layer
         return None

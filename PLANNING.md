@@ -2205,6 +2205,17 @@ without it they return 503 (relevant to the Phase 4 standalone server).
   marimo check, full HTTP surface incl. POST size/empty/auth/bogus). **Needs
   in-QGIS testing**: insert/extent/selected against a real project + selection.
   Remaining Phase 2: **2b** = dock widget + raster `get_layer`.
+- 2026-06-10: **Phase 2b built — dock widget + raster.** `plugin/ui/dock.py`
+  `MarimoManagerDock` (lists running notebooks with PID, Launch…/Stop/Refresh,
+  bridge status; `qgis.PyQt` widgets per D3); `MarimoProcessManager` refactored to
+  track records + `stop`/`stop_all`; `plugin.py` adds the dock via
+  `iface.addDockWidget` in `initGui` (fail-safe) and removes it in `unload`.
+  Raster: `convert.raster_to_tif` (gdal:translate); `api.get_layer` now branches
+  vector→FlatGeobuf / raster→GeoTIFF; client `get_layer` reads rasters with
+  **rioxarray** (optional dep — clear error if absent). **Phase 2 feature-complete
+  pending in-QGIS testing** (dock interactions, insert/extent/selected, raster
+  fetch). Verified w/o QGIS: compile (incl. Qt dock), ruff, HTTP regression.
+  Phase 3 (per §7) = map rendering + Processing-algorithm bridge.
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 
