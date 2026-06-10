@@ -17,6 +17,7 @@ Connection details come only from the environment the plugin injects:
 raises `RuntimeError` so the fallback above triggers.
 """
 
+import json
 import os
 from urllib.parse import quote
 
@@ -105,3 +106,42 @@ class QgisBridge:
         finally:
             os.unlink(tmp)
         return self._client.post("/api/insert?name=" + quote(name, safe=""), data)
+
+    def render_map(self, width=800, height=600):
+        """Render the live QGIS map canvas and return PNG bytes.
+
+        Pass the result to `marimo.image(...)` to show it in a cell.
+        """
+        return self._client.get_bytes(
+            f"/api/render?width={int(width)}&height={int(height)}"
+        )
+
+    def list_algorithms(self):
+        """Return the Processing algorithm registry (id/name/group) as a DataFrame."""
+        import pandas as pd
+
+        return pd.DataFrame(self._client.get("/api/algorithms")["algorithms"])
+
+    def run_algorithm(self, alg_id, params=None):
+        """Run a Processing algorithm and return its result dict.
+
+        Layer outputs (TEMPORARY_OUTPUT) come back as temp-file paths and are
+        read into GeoDataFrames (vector) or rioxarray DataArrays (raster);
+        scalar outputs (counts, areas, ...) pass through unchanged.
+        """
+        body = json.dumps({"alg_id": alg_id, "params": params or {}}).encode("utf-8")
+        result = self._client.post("/api/run", body, content_type="application/json")
+        out = {}
+        for key, value in result["result"].items():
+            if isinstance(value, dict) and "_layer" in value:
+                if value.get("format") == "GeoTIFF":
+                    import rioxarray
+
+                    out[key] = rioxarray.open_rasterio(value["_layer"])
+                else:
+                    import geopandas as gpd
+
+                    out[key] = gpd.read_file(value["_layer"])
+            else:
+                out[key] = value
+        return out

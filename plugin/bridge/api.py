@@ -12,11 +12,13 @@ Phase 2: get_layer_info, insert_layer, canvas_extent, selected_features.
 bridge runs without it (standalone/headless server, Phase 4) they return 503.
 """
 
-from qgis.PyQt.QtCore import QObject, pyqtSlot
+from qgis.PyQt.QtCore import QBuffer, QByteArray, QIODevice, QObject, QSize, pyqtSlot
 from qgis.core import (
     Qgis,
     QgsApplication,
     QgsFeatureRequest,
+    QgsMapRendererParallelJob,
+    QgsMapSettings,
     QgsProject,
     QgsRasterLayer,
     QgsVectorLayer,
@@ -28,6 +30,9 @@ from .convert import layer_to_fgb, raster_to_tif
 # Upper bound on an uploaded layer body (D2: bound everything). 256 MiB of
 # FlatGeobuf is a very large vector layer for interactive analysis.
 MAX_INSERT_BYTES = 256 * 1024 * 1024
+
+# Upper bound on a rendered map dimension (D2). 4096 px is large for a notebook.
+MAX_RENDER_PX = 4096
 
 
 def _log(message, level="info"):
@@ -104,6 +109,12 @@ class QGISBridgeAPI(QObject):
             return self._canvas_extent()
         if method == "selected_features":
             return self._selected_features(request.get("name", ""))
+        if method == "render_map":
+            return self._render_map(request.get("width", 800), request.get("height", 600))
+        if method == "list_algorithms":
+            return self._list_algorithms()
+        if method == "run_algorithm":
+            return self._run_algorithm(request.get("alg_id", ""), request.get("params"))
         raise ApiError(404, "unknown method")
 
     # ---- read handlers ---------------------------------------------------
@@ -232,6 +243,71 @@ class QGISBridgeAPI(QObject):
             "name": layer.name(),
             "feature_count": layer.featureCount(),
         }
+
+    # ---- render + processing ---------------------------------------------
+
+    def _render_map(self, width, height):
+        """Render the current map canvas to PNG bytes at the requested size."""
+        canvas = self._require_iface().mapCanvas()
+        width = max(1, min(int(width), MAX_RENDER_PX))
+        height = max(1, min(int(height), MAX_RENDER_PX))
+
+        settings = QgsMapSettings(canvas.mapSettings())
+        settings.setOutputSize(QSize(width, height))
+
+        job = QgsMapRendererParallelJob(settings)
+        job.start()
+        job.waitForFinished()
+
+        buffer = QByteArray()
+        device = QBuffer(buffer)
+        device.open(QIODevice.OpenModeFlag.WriteOnly)
+        job.renderedImage().save(device, "PNG")
+        # Binary response (D-render): the server sends these bytes directly.
+        return {"_bytes": bytes(buffer), "_content_type": "image/png"}
+
+    def _list_algorithms(self):
+        registry = QgsApplication.processingRegistry()
+        algorithms = [
+            {"id": alg.id(), "name": alg.displayName(), "group": alg.group()}
+            for alg in registry.algorithms()
+        ]
+        return {"algorithms": algorithms}
+
+    def _run_algorithm(self, alg_id, params):
+        """Run a Processing algorithm; replace live-layer outputs with temp paths.
+
+        `params` come from the client as JSON (INPUT may be a project layer name,
+        which Processing resolves; OUTPUT is typically "TEMPORARY_OUTPUT"). Any
+        QgsVectorLayer / QgsRasterLayer in the result is written to a temp file
+        and returned as a path the client reads (the HTTP boundary cannot carry
+        live layer objects — §6 run_algorithm note).
+        """
+        if not alg_id:
+            raise ApiError(400, "missing algorithm id")
+        import processing  # only available inside QGIS
+
+        try:
+            result = processing.run(alg_id, params or {})
+        except Exception as exc:  # noqa: BLE001
+            _log(f"run_algorithm {alg_id!r} failed: {exc!r}", "error")
+            raise ApiError(400, "algorithm failed")
+
+        out = {}
+        for key, value in result.items():
+            if isinstance(value, QgsVectorLayer):
+                path = self._temp.new_path(".fgb")
+                layer_to_fgb(value, path)
+                out[key] = {"_layer": path, "format": "FlatGeobuf"}
+            elif isinstance(value, QgsRasterLayer):
+                path = self._temp.new_path(".tif")
+                raster_to_tif(value, path)
+                out[key] = {"_layer": path, "format": "GeoTIFF"}
+            elif value is None or isinstance(value, (str, int, float, bool)):
+                out[key] = value
+            else:
+                out[key] = str(value)  # stringify anything non-JSON-serialisable
+        return {"result": out}
 
     # ---- helpers ---------------------------------------------------------
 

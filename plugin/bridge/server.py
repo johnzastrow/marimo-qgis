@@ -53,6 +53,14 @@ def route_get(raw_path):
         return {"method": "canvas_extent"}
     if parts == ["api", "selected"]:
         return {"method": "selected_features", "name": query.get("layer", [""])[0]}
+    if parts == ["api", "algorithms"]:
+        return {"method": "list_algorithms"}
+    if parts == ["api", "render"]:
+        return {
+            "method": "render_map",
+            "width": query.get("width", ["800"])[0],
+            "height": query.get("height", ["600"])[0],
+        }
     if len(parts) == 3 and parts[0] == "api" and parts[1] == "layer":
         return {"method": "get_layer", "name": unquote(parts[2])}
     if len(parts) == 3 and parts[0] == "api" and parts[1] == "layer-info":
@@ -79,6 +87,13 @@ def make_handler(bridge):
             self.end_headers()
             self.wfile.write(body)
 
+        def _send_bytes(self, body, content_type):
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def _authorized(self):
             if bridge.auth.authorize(self.headers.get("Authorization")):
                 return True
@@ -88,6 +103,8 @@ def make_handler(bridge):
         def _respond(self, result):
             if isinstance(result, dict) and "_error" in result:
                 self._send_json(result.get("_status", 500), {"error": result["_error"]})
+            elif isinstance(result, dict) and "_bytes" in result:
+                self._send_bytes(result["_bytes"], result.get("_content_type", "application/octet-stream"))
             else:
                 self._send_json(200, result)
 
@@ -100,30 +117,56 @@ def make_handler(bridge):
                 return
             self._respond(bridge.call_api(request))
 
+        def _read_body(self):
+            """Read and size-check the request body; returns bytes or None (already replied)."""
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            if length <= 0:
+                self._send_json(400, {"error": "empty body"})
+                return None
+            if length > MAX_BODY_BYTES:
+                self._send_json(413, {"error": "payload too large"})
+                return None
+            return self.rfile.read(length)
+
         def do_POST(self):
             if not self._authorized():
                 return
             parsed = urlparse(self.path)
             parts = [p for p in parsed.path.split("/") if p]
-            if parts != ["api", "insert"]:
-                self._send_json(404, {"error": "unknown endpoint"})
-                return
 
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            if length <= 0:
-                self._send_json(400, {"error": "empty body"})
-                return
-            if length > MAX_BODY_BYTES:
-                self._send_json(413, {"error": "payload too large"})
-                return
-
-            data = self.rfile.read(length)
-            name = parse_qs(parsed.query).get("name", [""])[0]
-            self._respond(
-                bridge.call_api(
-                    {"method": "insert_layer", "name": unquote(name), "data": data}
+            if parts == ["api", "insert"]:
+                data = self._read_body()
+                if data is None:
+                    return
+                name = parse_qs(parsed.query).get("name", [""])[0]
+                self._respond(
+                    bridge.call_api(
+                        {"method": "insert_layer", "name": unquote(name), "data": data}
+                    )
                 )
-            )
+                return
+
+            if parts == ["api", "run"]:
+                data = self._read_body()
+                if data is None:
+                    return
+                try:
+                    payload = json.loads(data.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    self._send_json(400, {"error": "invalid JSON body"})
+                    return
+                self._respond(
+                    bridge.call_api(
+                        {
+                            "method": "run_algorithm",
+                            "alg_id": payload.get("alg_id", ""),
+                            "params": payload.get("params", {}),
+                        }
+                    )
+                )
+                return
+
+            self._send_json(404, {"error": "unknown endpoint"})
 
     return _Handler
 

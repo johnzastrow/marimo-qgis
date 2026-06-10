@@ -24,19 +24,24 @@ class Client:
 
     def get(self, path):
         """GET `path`, return the parsed JSON body, or raise BridgeError."""
-        return self._send(urllib.request.Request(self._base + path))
+        return json.loads(self._read(urllib.request.Request(self._base + path)))
+
+    def get_bytes(self, path):
+        """GET `path`, return the raw response bytes (e.g. a rendered PNG)."""
+        return self._read(urllib.request.Request(self._base + path))
 
     def post(self, path, data, content_type="application/octet-stream"):
         """POST raw bytes to `path`, return the parsed JSON body."""
         req = urllib.request.Request(self._base + path, data=data, method="POST")
         req.add_header("Content-Type", content_type)
-        return self._send(req)
+        return json.loads(self._read(req))
 
-    def _send(self, req):
+    def _read(self, req):
+        """Send `req` (auth header attached) and return the raw response bytes."""
         req.add_header("Authorization", "Bearer " + self._token)
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                return resp.read()
         except urllib.error.HTTPError as exc:
             message = ""
             try:

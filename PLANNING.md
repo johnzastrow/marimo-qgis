@@ -2237,6 +2237,22 @@ does not connect the bridge).
   compile, ruff, marimo check; `make package` excludes provider/algorithm and
   includes the icon + dock. In-QGIS testing pending (button toggles dock; launch
   from dock).
+- 2026-06-10: **Phase 3 built — map rendering + Processing bridge.** Bridge gained
+  `render_map` (`QgsMapRendererParallelJob` → PNG **bytes**, size-bounded to
+  `MAX_RENDER_PX`=4096), `list_algorithms`, and `run_algorithm` (replaces
+  QgsVectorLayer/QgsRasterLayer outputs with temp paths per the §6 note).
+  server.py: GET `/api/render` (binary response via new `_send_bytes` +
+  `_respond` `_bytes` branch), GET `/api/algorithms`, POST `/api/run` (JSON body).
+  client `_client.py` refactored (shared `_read`, new `get_bytes`); `qgis_bridge`
+  gained `render_map`→PNG bytes (for `mo.image`), `list_algorithms`→DataFrame,
+  `run_algorithm`→dict (materialises layer outputs). Examples: `render_map.py`
+  (size sliders → render the canvas), `reactive_processing.py` (algorithm browser
+  + slider → native:buffer → insert). Verified w/o QGIS: compile, ruff, marimo
+  check, and client↔server round trip (PNG bytes + image/png header,
+  list_algorithms DataFrame, run_algorithm scalar passthrough, invalid-JSON 400).
+  **Needs in-QGIS testing**: real render, registry, and `native:buffer` run.
+  **Phase 3 completes the HTTP-mode feature set** (§7); next is Phase 4
+  (cross-platform + distribution) or Phase 5 (optional in-process mode).
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 
