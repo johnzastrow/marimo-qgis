@@ -6,7 +6,7 @@
 
 **Architecture:** Three logical sections — layer inventory (enumerate all 9 layers via `dataProvider().subLayers()`), population trends (load `town` layer, build decade-change DataFrame), spatial analysis (total road length via `QgsDistanceArea.measureLength`). Concise markdown narrates each section. No map rendering; headless QGIS only.
 
-**Tech Stack:** Python 3.13, QGIS 4 (PyQGIS), marimo 0.21.1, pandas, uv + `--system-site-packages` venv
+**Tech Stack:** Python 3.13, QGIS 4 (PyQGIS), marimo 0.21.1, pandas (notebooks run on the QGIS Python)
 
 ---
 
@@ -46,14 +46,14 @@ Create `example/INSTRUCTIONS.md` with this exact content:
 |-------------|---------|
 | QGIS | 4.x |
 | Python | 3.13 |
-| uv | latest |
+| marimo | into QGIS Python |
 
 ## Quick Start
 
 ```bash
 # From repo root:
-uv venv --python 3.13 --system-site-packages
-uv pip install marimo pandas numpy
+# Notebooks run on the QGIS Python -- install marimo into it:
+python3 -m pip install --user marimo
 ./marimo-qgis edit example/gpkg_summary.py
 ```
 

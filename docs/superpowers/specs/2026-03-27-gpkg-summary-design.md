@@ -156,10 +156,10 @@ proximity to water, population density using town polygon area).
 Concise — requirements table + 3-command quick start:
 
 ```
-Requirements: QGIS 4, Python 3.13, uv
+Requirements: QGIS 4 (notebooks run on the QGIS Python)
 Quick start:
-  uv venv --python 3.13 --system-site-packages
-  uv pip install marimo pandas numpy
+  python3 -m pip install --user marimo
+  # pandas/numpy ship with QGIS
   ./marimo-qgis edit example/gpkg_summary.py   (from repo root)
 ```
 

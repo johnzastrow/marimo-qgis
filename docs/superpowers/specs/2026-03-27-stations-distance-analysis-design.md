@@ -121,11 +121,11 @@ Every cell is preceded by a `mo.md()` cell explaining:
 ## Constraints
 
 - Add to `pyproject.toml` dependencies and to the PEP 723 `# /// script` header in `notebooks/stations_analysis.py`: `pandas` and `numpy` (no version pins needed)
-- Install via `uv add pandas numpy` before running
+- Install marimo into the QGIS Python before running: `python3 -m pip install --user marimo` (pandas/numpy ship with QGIS)
 - `QT_QPA_PLATFORM=offscreen` set inside `qgis_init` cell
 - `PYTHONPATH=/usr/share/qgis/python` required at launch (via `marimo-qgis` wrapper)
 - Run with: `./marimo-qgis edit notebooks/stations_analysis.py`
-- Verify with: `PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/out.html`
+- Verify with: `PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/out.html`
 
 ---
 

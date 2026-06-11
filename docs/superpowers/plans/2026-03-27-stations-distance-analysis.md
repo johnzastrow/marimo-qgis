@@ -6,7 +6,7 @@
 
 **Architecture:** One marimo notebook file with 12 cells in strict dependency order: `setup → qgis_init → load_layer → to_dataframe → dist_matrix → analysis`, each preceded by a prose `mo.md()` cell. PyQGIS owns all spatial computation; Pandas owns all tabular analysis. The cell boundary between `dist_matrix` and `analysis` is intentionally clean to allow a future QGIS Processing Toolbox step to replace `dist_matrix` without touching anything else.
 
-**Tech Stack:** Python 3.13, marimo 0.21.1, QGIS 4.0.0-Norrköping (`/usr/share/qgis/python`), pandas, numpy, uv
+**Tech Stack:** Python 3.13, marimo 0.21.1, QGIS 4.0.0-Norrköping (`/usr/share/qgis/python`), pandas, numpy (notebooks run on the QGIS Python)
 
 ---
 
@@ -24,7 +24,7 @@ The `marimo-qgis` wrapper script already sets `PYTHONPATH=/usr/share/qgis/python
 ## Verification command (used after every task)
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -58,15 +58,15 @@ dependencies = [
 
 ```bash
 cd /home/jcz/Github/marimo_qgis
-uv sync
+python3 -m pip install --user marimo
 ```
 
-Expected: uv resolves and installs pandas and numpy into `.venv`.
+Expected: marimo installed into the QGIS Python; pandas and numpy ship with QGIS.
 
 - [ ] **Step 3: Verify import works**
 
 ```bash
-uv run python -c "import pandas; import numpy; print('pandas', pandas.__version__, 'numpy', numpy.__version__)"
+python3 -c "import pandas; import numpy; print('pandas', pandas.__version__, 'numpy', numpy.__version__)"
 ```
 
 Expected: both version strings printed, no errors.
@@ -74,7 +74,7 @@ Expected: both version strings printed, no errors.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add pyproject.toml uv.lock
+git add pyproject.toml
 git commit -m "feat: add pandas and numpy dependencies"
 ```
 
@@ -189,7 +189,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Run lint check**
 
 ```bash
-uv run marimo check notebooks/stations_analysis.py
+python3 -m marimo check notebooks/stations_analysis.py
 ```
 
 Expected: 0 errors (warnings about markdown indentation are acceptable).
@@ -197,7 +197,7 @@ Expected: 0 errors (warnings about markdown indentation are acceptable).
 - [ ] **Step 3: Verify scaffold executes**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -272,13 +272,13 @@ def _(QgsVectorLayer):
 - [ ] **Step 2: Run lint check**
 
 ```bash
-uv run marimo check notebooks/stations_analysis.py
+python3 -m marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 3: Verify layer loads**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -354,13 +354,13 @@ def _(layer, mo):
 - [ ] **Step 3: Run lint check**
 
 ```bash
-uv run marimo check notebooks/stations_analysis.py
+python3 -m marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 4: Verify table appears in export**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 python3 -c "
 with open('/tmp/sa_test.html') as f: c = f.read()
@@ -459,20 +459,20 @@ def _(QgsDistanceArea, QgsPointXY, QgsProject, df, layer, mo, pd):
 - [ ] **Step 3: Run lint check**
 
 ```bash
-uv run marimo check notebooks/stations_analysis.py
+python3 -m marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 4: Verify matrix appears and values are plausible**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
 Expected: `Exit: 0`. Then spot-check a known distance:
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run python -c "
+PYTHONPATH=/usr/share/qgis/python python3 -c "
 import sys, os
 sys.path.insert(0, '/usr/share/qgis/python')
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
@@ -586,13 +586,13 @@ def _(dist_df, mo, pd):
 - [ ] **Step 3: Run lint check**
 
 ```bash
-uv run marimo check notebooks/stations_analysis.py
+python3 -m marimo check notebooks/stations_analysis.py
 ```
 
 - [ ] **Step 4: Verify full notebook executes and results are correct**
 
 ```bash
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_test.html 2>&1
 echo "Exit: $?"
 ```
 
@@ -667,8 +667,8 @@ In the `Key Files` section, add:
 - [ ] **Step 3: Final verification**
 
 ```bash
-uv run marimo check notebooks/stations_analysis.py
-PYTHONPATH=/usr/share/qgis/python uv run marimo export html notebooks/stations_analysis.py -o /tmp/sa_final.html 2>&1
+python3 -m marimo check notebooks/stations_analysis.py
+PYTHONPATH=/usr/share/qgis/python python3 -m marimo export html notebooks/stations_analysis.py -o /tmp/sa_final.html 2>&1
 echo "Exit: $?"
 ```
 
