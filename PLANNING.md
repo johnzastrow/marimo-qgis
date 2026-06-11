@@ -2155,6 +2155,17 @@ plugin. Version 0.1.0 → 0.2.0; `category` Analysis → Plugins (**closes G5**)
 standalone `processing/launch_marimo.py` script stays as a no-plugin option (it
 does not connect the bridge).
 
+**D8 — Distribution: bundle the client, don't publish to PyPI.** Per the user,
+the only distribution channel is the **QGIS Plugin Repository** — `qgis_bridge`
+is **not** published to PyPI. So the client is **bundled inside the plugin zip**
+(`make package` copies `qgis_bridge/` into `marimo_launcher/`), and
+`MarimoProcessManager` adds the directory that contains `qgis_bridge` (found by
+`runtime.qgis_bridge_dir()`: the plugin dir for a zip install, the repo root in
+dev) to the launched notebook's `PYTHONPATH`. Notebooks therefore `import
+qgis_bridge` with no pip install. This supersedes §7 Phase 4's "publish
+`qgis_bridge` to PyPI" and "aiohttp in the plugin's bundled dependencies" items
+— there is no aiohttp to bundle (stdlib `http.server`, D1).
+
 ### 8.5 Change log
 
 - 2026-06-10: Closed **G2** (added GPLv3 `LICENSE`), **G3** (Makefile now copies
@@ -2273,6 +2284,15 @@ does not connect the bridge).
   the run-order guidance + "Run all cells" tip prevents the "button doesn't work
   until you run the cell below" confusion. All pass `marimo check` (only cosmetic
   markdown-indentation warnings, auto-fixed by marimo's format-on-save).
+- 2026-06-11: **Phase 4 (in progress): tests, CI, bundling.** Added a `tests/`
+  pytest suite (server transport/auth/routing + `qgis_bridge` client; 23 tests,
+  no QGIS required) and `.github/workflows/ci.yml` (ruff + `marimo check` +
+  pytest + `make package`). Bundled the client into the plugin and inject its
+  path on launch (**D8**); added a "Bridge (plugin) issues" section to
+  TROUBLESHOOTING. Closed **G1** (`metadata.txt` `email` filled in).
+  **Remaining user actions:** QGIS Plugin Repository submission; Windows/macOS
+  testing (the hardcoded `/usr/share/qgis/python` PYTHONPATH and `uv` launch are
+  Linux-shaped — cross-platform paths still to verify).
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 

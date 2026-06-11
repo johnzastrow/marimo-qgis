@@ -5,7 +5,7 @@ qgisMaximumVersion=4.99
 description=Launch marimo reactive notebooks from QGIS with a live bridge to the project
 version=0.2.0
 author=John Zastrow
-email=
+email=br8kwall@gmail.com
 about=Adds a toolbar button that opens the "marimo" manager panel, where you can
     launch any marimo notebook (.py file) in your browser as a detached
     subprocess. Notebooks get a live HTTP bridge to the running QGIS project

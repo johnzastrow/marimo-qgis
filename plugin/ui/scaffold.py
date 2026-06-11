@@ -4,11 +4,9 @@ The scaffold connects to the live bridge (falling back to headless), lets the us
 pick a vector layer, and summarises it — a runnable starting point.
 
 `qgis_bridge` must be importable in the notebook venv. In the dev/symlink layout
-it lives next to the plugin's repo root, so we inject that path; once `qgis_bridge`
-is installed (PyPI, Phase 4) the injected path is simply unused.
+it lives next to the plugin's repo root (dev), or bundled inside the plugin
+(QGIS-repo / zip install); we inject that path so the notebook can import it.
 """
-
-import os
 
 # The notebook body. A sentinel (not str.format) is used for substitution because
 # the template itself contains f-string braces.
@@ -158,16 +156,12 @@ if __name__ == "__main__":
 def qgis_bridge_root():
     """Return the directory to put on sys.path so `import qgis_bridge` works.
 
-    In the dev/symlink layout `qgis_bridge` sits at the repo root, next to the
-    `plugin/` package this file lives in. Returns that root, or None if not found
-    (e.g. a zip-installed plugin — then the notebook relies on an installed
-    qgis_bridge).
+    Resolves `qgis_bridge` whether it is bundled inside the plugin (zip install)
+    or at the repo root (dev/symlink). Delegates to the shared helper.
     """
-    plugin_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-    repo_root = os.path.dirname(plugin_dir)
-    if os.path.isdir(os.path.join(repo_root, "qgis_bridge")):
-        return repo_root
-    return None
+    from ..runtime import qgis_bridge_dir
+
+    return qgis_bridge_dir()
 
 
 def scaffold_notebook(bridge_root=None):

@@ -13,7 +13,7 @@ from `plugin.runtime.bridge_env()`.
 import os
 import subprocess
 
-from ..runtime import bridge_env
+from ..runtime import bridge_env, qgis_bridge_dir
 
 
 class MarimoProcessManager:
@@ -29,9 +29,14 @@ class MarimoProcessManager:
         Returns the Popen handle. Raises FileNotFoundError if `uv` is not on PATH.
         """
         env = os.environ.copy()
-        # Defence in depth: notebooks self-configure sys.path, but make the
-        # bindings discoverable to the marimo server process too.
-        env["PYTHONPATH"] = "/usr/share/qgis/python"
+        # PYTHONPATH for the notebook process: the PyQGIS bindings, plus the
+        # directory that holds the bundled `qgis_bridge` client so notebooks can
+        # `import qgis_bridge` without a pip install (it ships in the plugin).
+        paths = ["/usr/share/qgis/python"]
+        bridge_dir = qgis_bridge_dir()
+        if bridge_dir:
+            paths.append(bridge_dir)
+        env["PYTHONPATH"] = os.pathsep.join(paths)
         # The subprocess has a real display; do not force the offscreen platform.
         env.pop("QT_QPA_PLATFORM", None)
         # Connect the notebook to the live bridge (no-op if no server running).

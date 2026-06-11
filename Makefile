@@ -15,6 +15,10 @@ package: clean
 	# are included automatically — never enumerate files by hand, or they get
 	# silently dropped from the zip and the installed plugin breaks on import.
 	cp -r $(PLUGIN_SRC)/. $(PLUGIN_NAME)/
+	# Bundle the notebook-side client INSIDE the plugin so users who install
+	# only the plugin (no pip) can `import qgis_bridge` from launched notebooks
+	# (MarimoProcessManager adds the plugin dir to the notebook's PYTHONPATH).
+	cp -r qgis_bridge $(PLUGIN_NAME)/
 	# Bundle the LICENSE — required for publication on plugins.qgis.org.
 	cp LICENSE $(PLUGIN_NAME)/
 	# Strip Python caches that may have been copied in.

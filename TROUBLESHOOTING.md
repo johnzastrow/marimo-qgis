@@ -390,3 +390,60 @@ def _():
 PYTHONPATH=/usr/share/qgis/python QT_QPA_PLATFORM=offscreen \
   .venv/bin/marimo export html notebooks/stations_analysis.py -o /tmp/out.html && echo OK
 ```
+
+---
+
+## Bridge (plugin) issues
+
+The marimo QGIS plugin runs a localhost HTTP **bridge**; notebooks launched from
+its dock reach the live project through the bundled `qgis_bridge` client. Common
+failure modes:
+
+### Notebook shows "⚪ Headless" when you expected "🟢 Live"
+
+The notebook didn't receive the bridge connection. Causes, most common first:
+
+- **The plugin is running stale code.** The installed plugin must be a *symlink*
+  to `plugin/` (not an old copied directory), and **QGIS must be restarted**
+  after pulling changes that add new sub-modules — a running plugin keeps the old
+  code in memory. Check **Log Messages ▸ "marimo bridge"** for
+  `bridge listening on 127.0.0.1:<port>`. If it's absent, the bridge never
+  started.
+- **The notebook was opened before the bridge started**, or in a tab left over
+  from a previous session. Close it and **Launch it again** from the dock.
+- **You ran it from the terminal** (`uv run marimo edit …`) instead of from the
+  dock. Terminal launches have no bridge env, so headless is correct there.
+
+### `bridge failed to start: …` in the "marimo bridge" log
+
+The server couldn't bind or a bridge module failed to import. The plugin is
+fail-safe (it still loads), but there's no live bridge. Read the logged
+exception; restart QGIS after fixing. A stuck port from a previous crash is rare
+(the bridge binds an OS-assigned ephemeral port, not a fixed one).
+
+### `ModuleNotFoundError: No module named 'qgis_bridge'`
+
+The notebook process couldn't find the client. When launched from the dock the
+plugin adds the directory containing `qgis_bridge` to `PYTHONPATH` (it ships
+inside the plugin). If you see this, the plugin is likely stale (restart QGIS),
+or you launched the notebook outside the plugin. Standalone notebooks add the
+repo root to `sys.path` themselves — only works when run from inside the repo.
+
+### `ModuleNotFoundError: No module named 'geopandas'` (or `rioxarray`)
+
+`get_layer` / `get_selected_features` / `insert_layer` read FlatGeobuf into a
+GeoDataFrame and need **geopandas**; raster `get_layer` needs **rioxarray**
+(optional). Install into the notebook venv: `./qgis-env.sh setup` (adds
+geopandas), and `uv pip install rioxarray` if you fetch rasters.
+
+### `BridgeError: bridge 401` / `bridge unreachable`
+
+- **401** — the notebook's `MARIMO_QGIS_TOKEN` doesn't match the running server.
+  Usually a notebook left open from a previous QGIS session; relaunch it.
+- **unreachable** — QGIS (and its bridge) closed while the notebook stayed open.
+  Reopen QGIS and relaunch the notebook.
+
+### Plugin won't enable / not listed
+
+The plugin requires **QGIS 4.0+** (`qgisMinimumVersion=4.0`). On QGIS 3 it will
+not load. `uv` must be on `PATH` for the dock to launch notebooks.

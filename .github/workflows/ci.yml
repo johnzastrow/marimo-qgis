@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Ruff lint
+        run: uvx ruff check plugin/ qgis_bridge/ tests/
+
+      - name: marimo check (notebooks parse + structure)
+        run: uvx marimo check example/*.py notebooks/*.py
+
+      - name: Bridge + client tests (no QGIS)
+        # --no-project so we don't install the heavy notebook deps (geopandas,
+        # playwright, ...). The suite needs only stdlib + pandas (one test).
+        run: uv run --no-project --with pytest --with pandas python -m pytest tests/ -q
+
+      - name: Plugin packages without error
+        run: make package
