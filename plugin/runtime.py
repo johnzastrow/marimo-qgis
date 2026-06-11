@@ -7,8 +7,53 @@ every caller.
 """
 
 import os
+import shutil
+import sys
 
 _server = None
+
+
+def uv_executable():
+    """Return the absolute path to the `uv` binary, or None if not found.
+
+    QGIS on Windows is launched through the OSGeo4W shell, which rebuilds PATH
+    and typically drops the user's `~/.local/bin` — exactly where the standalone
+    uv installer puts `uv.exe`. So resolving `uv` from PATH alone (the implicit
+    behaviour of `subprocess.Popen(["uv", ...])`) fails inside QGIS even though
+    `uv` works fine in a normal terminal. We therefore resolve explicitly:
+
+      1. an explicit override (`MARIMO_QGIS_UV` env var) wins;
+      2. then PATH (correct whenever QGIS inherited a sane environment);
+      3. then the well-known per-user install locations.
+    """
+    override = os.environ.get("MARIMO_QGIS_UV")
+    if override and os.path.isfile(override):
+        return override
+
+    found = shutil.which("uv")
+    if found:
+        return found
+
+    exe = "uv.exe" if sys.platform == "win32" else "uv"
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(home, ".local", "bin", exe),  # standalone installer (default)
+        os.path.join(home, ".cargo", "bin", exe),  # cargo install
+    ]
+    if sys.platform == "win32":
+        # pip --user lands in %APPDATA%\Python\Python3XX\Scripts\uv.exe
+        appdata = os.environ.get("APPDATA")
+        if appdata and os.path.isdir(os.path.join(appdata, "Python")):
+            py_root = os.path.join(appdata, "Python")
+            for sub in os.listdir(py_root):
+                candidates.append(os.path.join(py_root, sub, "Scripts", exe))
+    else:
+        candidates += ["/usr/local/bin/uv", "/opt/homebrew/bin/uv", "/usr/bin/uv"]
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+    return None
 
 
 def qgis_bridge_dir():

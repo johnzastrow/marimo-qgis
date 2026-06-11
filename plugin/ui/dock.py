@@ -173,7 +173,11 @@ class MarimoManagerDock(QDockWidget):
         try:
             self._pm.launch(path, mode="edit")
         except FileNotFoundError:
-            self._status.setText("✗ 'uv' not found on PATH — install uv and restart QGIS.")
+            self._status.setText(
+                "✗ 'uv' not found. Install uv, then either restart QGIS so it "
+                "inherits your PATH, or set the MARIMO_QGIS_UV env var to the "
+                "full path of uv.exe."
+            )
             return
         self.refresh()
 

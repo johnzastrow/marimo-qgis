@@ -14,7 +14,7 @@ import os
 import subprocess
 import sys
 
-from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir
+from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir, uv_executable
 
 
 class MarimoProcessManager:
@@ -27,8 +27,13 @@ class MarimoProcessManager:
     def launch(self, notebook_path, mode="edit", cwd=None):
         """Launch `marimo <mode> <notebook_path>` with the bridge env injected.
 
-        Returns the Popen handle. Raises FileNotFoundError if `uv` is not on PATH.
+        Returns the Popen handle. Raises FileNotFoundError if `uv` cannot be
+        located (not on PATH and not in any known install location).
         """
+        uv = uv_executable()
+        if uv is None:
+            raise FileNotFoundError("uv")
+
         env = os.environ.copy()
         # PYTHONPATH for the notebook process: the PyQGIS bindings (discovered
         # from the running QGIS, so it is correct on Linux/Windows/macOS), plus
@@ -43,6 +48,10 @@ class MarimoProcessManager:
         env.pop("QT_QPA_PLATFORM", None)
         # Connect the notebook to the live bridge (no-op if no server running).
         env.update(bridge_env())
+        # Ensure uv's own directory is on the child PATH so any tools uv spawns
+        # (and uv itself, if it re-execs) resolve even when QGIS scrubbed PATH.
+        uv_dir = os.path.dirname(uv)
+        env["PATH"] = uv_dir + os.pathsep + env.get("PATH", "")
 
         # Crash isolation: give the notebook its own process group so a runaway
         # cell cannot take QGIS down. The mechanism differs by platform.
@@ -52,7 +61,7 @@ class MarimoProcessManager:
             isolation = {"start_new_session": True}
 
         proc = subprocess.Popen(
-            ["uv", "run", "marimo", mode, notebook_path],
+            [uv, "run", "marimo", mode, notebook_path],
             cwd=cwd or os.path.dirname(notebook_path),
             env=env,
             **isolation,
