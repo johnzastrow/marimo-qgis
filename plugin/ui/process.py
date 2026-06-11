@@ -23,6 +23,56 @@ from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir, qgis_python
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+# Bootstrap run as `<qgis_python> -c <this>` to install marimo across platforms.
+# It is deliberately platform-agnostic via PROGRESSIVE FALLBACK rather than
+# per-OS branching, because the interpreters differ:
+#   - Windows/macOS QGIS ship their own writable Python WITH pip bundled, so the
+#     first strategy (plain `pip install marimo`) succeeds.
+#   - Linux QGIS uses the SYSTEM python (e.g. /usr/bin/python3), which often has
+#     no `pip` module, is root-owned (can't write the system site), and on PEP
+#     668 distros is "externally-managed". So it bootstraps pip via ensurepip,
+#     then falls through to `--user` (installs to ~/.local, no root) and finally
+#     `--user --break-system-packages` for externally-managed system pythons.
+# Every attempt is echoed to stdout, which the dock captures to the log file.
+_INSTALL_BOOTSTRAP = r'''
+import subprocess, sys
+
+def run(args):
+    print(">>> " + sys.executable + " " + " ".join(args), flush=True)
+    return subprocess.call([sys.executable] + args)
+
+def have_pip():
+    return run(["-m", "pip", "--version"]) == 0
+
+if not have_pip():
+    print(">>> pip module missing; bootstrapping with ensurepip", flush=True)
+    if run(["-m", "ensurepip", "--user"]) != 0:
+        run(["-m", "ensurepip"])
+    if not have_pip():
+        print(
+            "ERROR: pip is unavailable in this interpreter and ensurepip could "
+            "not bootstrap it.\n"
+            "Install pip via your OS package manager, e.g.:\n"
+            "  sudo apt install python3-pip   (Debian/Ubuntu)\n"
+            "then retry. Interpreter: " + sys.executable,
+            flush=True,
+        )
+        sys.exit(3)
+
+base = ["-m", "pip", "install", "marimo"]
+rc = 1
+for extra in ([], ["--user"], ["--user", "--break-system-packages"]):
+    rc = run(base + extra)
+    if rc == 0:
+        print(">>> marimo installed successfully", flush=True)
+        sys.exit(0)
+    print(">>> strategy failed (rc=%d); trying next" % rc, flush=True)
+
+print("ERROR: all install strategies failed (rc=%d)." % rc, flush=True)
+sys.exit(rc)
+'''
+
+
 # Cache of interpreters known to have marimo. Probing costs a full interpreter
 # startup + `import marimo` (~1.5s), so we run it at most once per interpreter per
 # session. Only positive results are cached: a negative stays uncached so that an
@@ -84,7 +134,13 @@ class MarimoProcessManager:
         self._installs = []
 
     def install_marimo(self):
-        """Start `<qgis_python> -m pip install marimo` into QGIS's interpreter.
+        """Install marimo into QGIS's interpreter via a cross-platform bootstrap.
+
+        Runs `<qgis_python> -c <_INSTALL_BOOTSTRAP>`, which ensures pip exists
+        and progressively falls back (plain -> --user -> --user
+        --break-system-packages) so the same call works whether QGIS ships its
+        own writable Python with pip (Windows/macOS) or runs on a pip-less,
+        root-owned, externally-managed system Python (Linux).
 
         Output is captured to a log file rather than a console window — there is
         no console on Linux, and on Windows the flashing one closes too fast to
@@ -93,7 +149,7 @@ class MarimoProcessManager:
         while still running. Returns a record dict with "proc" and "log".
         """
         python_exe = qgis_python()
-        cmd = [python_exe, "-m", "pip", "install", "marimo"]
+        cmd = [python_exe, "-c", _INSTALL_BOOTSTRAP]
 
         # Own process group + suppressed console, mirroring notebook launches.
         if sys.platform == "win32":
@@ -106,8 +162,8 @@ class MarimoProcessManager:
         log_path = os.path.join(log_dir(), "pip_install_marimo.log")
         fh = open(log_path, "w", encoding="utf-8", errors="replace")
         fh.write("=== marimo install ===\n")
-        fh.write("command : " + subprocess.list2cmdline(cmd) + "\n")
         fh.write("python  : " + python_exe + "\n")
+        fh.write("command : " + python_exe + " -c <install bootstrap>\n")
         fh.write("=" * 40 + "\n\n")
         fh.flush()
 

@@ -298,10 +298,11 @@ class MarimoManagerDock(QDockWidget):
             "Install marimo?",
             "marimo is not installed in QGIS's Python:\n"
             f"  {py}\n\n"
-            "Install it now? This runs:\n"
-            f"  python -m pip install marimo\n\n"
-            "A console window shows progress; re-launch the notebook once it "
-            "finishes.",
+            "Install it now? This runs pip (falling back to a per-user install "
+            "where the system Python is read-only). Progress is logged and "
+            "you'll be notified when it finishes.\n\n"
+            "Note: on some Linux setups QGIS uses the system Python, which may "
+            "need pip first (e.g. 'sudo apt install python3-pip').",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
