@@ -77,6 +77,54 @@ class MarimoProcessManager:
         # Each record: {"path": str, "mode": str, "proc": Popen, "log": str,
         #               "_fh": file handle (closed when the process is pruned)}
         self._records = []
+        # In-flight `pip install marimo` jobs. Held here (not discarded) so the
+        # Popen is not garbage-collected mid-run — a dropped, still-running Popen
+        # emits a ResourceWarning ("subprocess N is still running") from its
+        # __del__. Reaped via reap_install() once the dock sees it has exited.
+        self._installs = []
+
+    def install_marimo(self):
+        """Start `<qgis_python> -m pip install marimo` into QGIS's interpreter.
+
+        Output is captured to a log file rather than a console window — there is
+        no console on Linux, and on Windows the flashing one closes too fast to
+        read — so failures stay visible (the dock surfaces the log tail). The
+        returned record's "proc" is retained on this manager so it is not GC'd
+        while still running. Returns a record dict with "proc" and "log".
+        """
+        python_exe = qgis_python()
+        cmd = [python_exe, "-m", "pip", "install", "marimo"]
+
+        # Own process group + suppressed console, mirroring notebook launches.
+        if sys.platform == "win32":
+            isolation = {
+                "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | _NO_WINDOW
+            }
+        else:
+            isolation = {"start_new_session": True}
+
+        log_path = os.path.join(log_dir(), "pip_install_marimo.log")
+        fh = open(log_path, "w", encoding="utf-8", errors="replace")
+        fh.write("=== marimo install ===\n")
+        fh.write("command : " + subprocess.list2cmdline(cmd) + "\n")
+        fh.write("python  : " + python_exe + "\n")
+        fh.write("=" * 40 + "\n\n")
+        fh.flush()
+
+        proc = subprocess.Popen(
+            cmd, stdout=fh, stderr=subprocess.STDOUT, **isolation
+        )
+        record = {"proc": proc, "log": log_path, "_fh": fh}
+        self._installs.append(record)
+        return record
+
+    def reap_install(self, record):
+        """Drop a finished install record and close its log handle."""
+        self._close_log(record)
+        try:
+            self._installs.remove(record)
+        except ValueError:
+            pass
 
     def launch(self, notebook_path, mode="edit", cwd=None):
         """Launch `<qgis_python> -m marimo <mode> <notebook_path>`.

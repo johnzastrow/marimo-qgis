@@ -10,8 +10,6 @@ All Qt imports go through `qgis.PyQt` (D3) so the code works on Qt5 and Qt6.
 """
 
 import os
-import subprocess
-import sys
 
 from qgis.core import QgsApplication, QgsProject, QgsSettings, QgsTask
 from qgis.PyQt.QtCore import Qt, QTimer
@@ -47,6 +45,7 @@ class MarimoManagerDock(QDockWidget):
         self.setObjectName("MarimoManagerDock")
         self._pm = process_manager
         self._server = server
+        self._install_record = None  # in-flight `pip install marimo`, if any
         self._settings = QgsSettings()
         self._browse_dir = self._settings.value(_DIR_SETTING, "") or (
             QgsProject.instance().homePath() or os.path.expanduser("~")
@@ -308,23 +307,54 @@ class MarimoManagerDock(QDockWidget):
         if reply != QMessageBox.StandardButton.Yes:
             self._status.setText("marimo is required to launch notebooks.")
             return False
-        # Run pip in a visible console so the user can watch the (sometimes slow)
-        # install, and keep QGIS responsive by not blocking on it.
+        # Start pip as a tracked subprocess (output logged, Popen retained so it
+        # is not GC'd mid-run) and poll for completion — this keeps QGIS
+        # responsive and works on Linux, where there is no console to watch.
         try:
-            flags = (
-                subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
-            )
-            subprocess.Popen([py, "-m", "pip", "install", "marimo"], creationflags=flags)
+            self._install_record = self._pm.install_marimo()
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(
                 self, "marimo", f"Could not start the install:\n{exc}"
             )
             return False
         self._status.setText(
-            "Installing marimo in a console window — re-launch the notebook "
-            "once it completes."
+            "Installing marimo … this can take a minute; you'll be notified "
+            "when it finishes."
         )
+        QTimer.singleShot(1500, self._check_install)
         return False
+
+    def _check_install(self):
+        """Poll the in-flight `pip install marimo` and report when it finishes."""
+        record = self._install_record
+        if record is None:
+            return
+        proc = record["proc"]
+        if proc.poll() is None:
+            QTimer.singleShot(1500, self._check_install)  # still installing
+            return
+
+        self._install_record = None
+        self._pm.reap_install(record)
+        if proc.returncode == 0 and marimo_available():
+            self._status.setText(
+                "marimo installed — launch a notebook to start."
+            )
+            QMessageBox.information(
+                self,
+                "marimo installed",
+                "marimo was installed into QGIS's Python.\nYou can now launch "
+                "notebooks.",
+            )
+        else:
+            tail = self._read_log_tail(record["log"])
+            self._status.setText("marimo install failed — see the dialog.")
+            QMessageBox.warning(
+                self,
+                "marimo install failed",
+                f"pip exited with code {proc.returncode}.\n\nLog file:\n"
+                f"{record['log']}\n\n--- last output ---\n{tail}",
+            )
 
     def _check_early_exit(self, record):
         proc = record["proc"]
