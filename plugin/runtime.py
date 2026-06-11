@@ -27,6 +27,23 @@ def qgis_bridge_dir():
     return None
 
 
+def pyqgis_dir():
+    """Return the directory that holds the `qgis` package, or None.
+
+    Derived from the running QGIS (this code runs inside the plugin, which *is*
+    PyQGIS) so it is correct on every platform — Linux `/usr/share/qgis/python`,
+    Windows `…\\apps\\qgis\\python`, macOS `…/Contents/Resources/python` — without
+    hardcoding any of them. Added to a launched notebook's PYTHONPATH so it can
+    `import qgis`.
+    """
+    try:
+        import qgis
+
+        return os.path.dirname(os.path.dirname(os.path.realpath(qgis.__file__)))
+    except Exception:  # noqa: BLE001 — fall back to the caller's default
+        return None
+
+
 def set_server(server):
     """Record the running QgisBridgeServer (or None to clear on unload)."""
     global _server

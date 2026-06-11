@@ -12,8 +12,9 @@ from `plugin.runtime.bridge_env()`.
 
 import os
 import subprocess
+import sys
 
-from ..runtime import bridge_env, qgis_bridge_dir
+from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir
 
 
 class MarimoProcessManager:
@@ -29,10 +30,11 @@ class MarimoProcessManager:
         Returns the Popen handle. Raises FileNotFoundError if `uv` is not on PATH.
         """
         env = os.environ.copy()
-        # PYTHONPATH for the notebook process: the PyQGIS bindings, plus the
-        # directory that holds the bundled `qgis_bridge` client so notebooks can
+        # PYTHONPATH for the notebook process: the PyQGIS bindings (discovered
+        # from the running QGIS, so it is correct on Linux/Windows/macOS), plus
+        # the directory holding the bundled `qgis_bridge` client so notebooks can
         # `import qgis_bridge` without a pip install (it ships in the plugin).
-        paths = ["/usr/share/qgis/python"]
+        paths = [pyqgis_dir() or "/usr/share/qgis/python"]
         bridge_dir = qgis_bridge_dir()
         if bridge_dir:
             paths.append(bridge_dir)
@@ -42,11 +44,18 @@ class MarimoProcessManager:
         # Connect the notebook to the live bridge (no-op if no server running).
         env.update(bridge_env())
 
+        # Crash isolation: give the notebook its own process group so a runaway
+        # cell cannot take QGIS down. The mechanism differs by platform.
+        if sys.platform == "win32":
+            isolation = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        else:
+            isolation = {"start_new_session": True}
+
         proc = subprocess.Popen(
             ["uv", "run", "marimo", mode, notebook_path],
             cwd=cwd or os.path.dirname(notebook_path),
             env=env,
-            start_new_session=True,  # crash isolation: own process group
+            **isolation,
         )
         self._records.append({"path": notebook_path, "mode": mode, "proc": proc})
         return proc

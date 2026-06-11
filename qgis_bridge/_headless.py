@@ -10,6 +10,36 @@ There is no live project in headless mode, so `list_layers()` is empty and
 """
 
 
+def _pyqgis_candidates():
+    """Likely PyQGIS-bindings directories for the current OS (version-agnostic).
+
+    Only used as a fallback: a venv built against QGIS's own interpreter usually
+    has `qgis` importable already. On a Linux *system* install the bindings live
+    outside site-packages, so the directory must be added to sys.path.
+    """
+    import glob
+    import os
+    import sys
+
+    if sys.platform.startswith("linux"):
+        return ["/usr/share/qgis/python"]
+    if sys.platform == "darwin":
+        return sorted(
+            glob.glob("/Applications/QGIS*.app/Contents/Resources/python"),
+            reverse=True,
+        )
+    if sys.platform == "win32":
+        roots = {
+            os.environ.get("ProgramFiles", r"C:\Program Files"),
+            os.environ.get("ProgramW6432", r"C:\Program Files"),
+        }
+        found = []
+        for root in roots:
+            found += glob.glob(os.path.join(root, "QGIS*", "apps", "qgis", "python"))
+        return sorted(set(found), reverse=True)
+    return []
+
+
 class HeadlessQGIS:
     """Self-contained headless QGIS context (own QgsApplication)."""
 
@@ -19,13 +49,19 @@ class HeadlessQGIS:
         import os
         import sys
 
-        # Make PyQGIS importable and force the offscreen Qt platform before any
-        # QgsApplication is created (the only point Qt reads QT_QPA_PLATFORM).
-        if "/usr/share/qgis/python" not in sys.path:
-            sys.path.insert(0, "/usr/share/qgis/python")
+        # Force the offscreen Qt platform before any QgsApplication is created
+        # (the only point Qt reads QT_QPA_PLATFORM).
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-        from qgis.core import QgsApplication
+        # Prefer the interpreter's own qgis (venv built against QGIS's Python);
+        # otherwise add a known PyQGIS location for this OS and retry.
+        try:
+            from qgis.core import QgsApplication
+        except ImportError:
+            for candidate in _pyqgis_candidates():
+                if os.path.isdir(candidate) and candidate not in sys.path:
+                    sys.path.insert(0, candidate)
+            from qgis.core import QgsApplication
 
         self._app = QgsApplication([], False)
         self._app.initQgis()

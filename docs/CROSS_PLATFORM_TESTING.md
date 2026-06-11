@@ -12,43 +12,23 @@ and how PyQGIS is located. Fix those first (§1), then run the checklist (§4).
 
 ---
 
-## 1. Linux-specific assumptions to fix before testing
+## 1. Platform-specific code — now handled (verify per platform)
 
-| # | Location | Linux assumption | Windows | macOS |
-|---|----------|------------------|---------|-------|
-| A1 | `plugin/ui/process.py` — `PYTHONPATH` | `"/usr/share/qgis/python"` hardcoded | `…\apps\qgis\python` | `…/QGIS.app/Contents/Resources/python` |
-| A2 | `qgis_bridge/_headless.py` — `sys.path.insert(...)` | `"/usr/share/qgis/python"` hardcoded | same as A1 | same as A1 |
-| A3 | `plugin/ui/process.py` — `subprocess.Popen(start_new_session=True)` | POSIX `setsid` for crash isolation | no effect; use `creationflags=CREATE_NEW_PROCESS_GROUP` | works (POSIX) |
-| A4 | `plugin/bridge/convert.py` — `os.chmod(dir, 0o700)` | enforces private temp dir | no-op (NTFS ACLs); harmless | works |
-| A5 | venv / deps tooling | `qgis-env.sh` is bash + detects the system Python | bash unavailable; QGIS bundles its own Python | bash available; QGIS bundles its own Python |
+The Linux-specific assumptions A1–A3 are **implemented** as of the cross-platform
+fix; the testing below verifies they actually work on Windows/macOS hardware.
 
-**A1/A2 are blocking** — PyQGIS won't be found at the Linux path, so notebooks
-fall back to headless (or fail to import `qgis`). Recommended fix: derive the
-PyQGIS path from the running QGIS instead of hardcoding. Inside the plugin
-(which *is* PyQGIS) the path is discoverable:
+| # | Location | What it does now | Status |
+|---|----------|------------------|--------|
+| A1 | `plugin/ui/process.py` + `runtime.pyqgis_dir()` | PYTHONPATH's PyQGIS dir is **derived from the running QGIS** (`os.path.dirname(os.path.dirname(qgis.__file__))`), correct on every OS; Linux path only as a last-resort fallback | ✅ fixed |
+| A2 | `qgis_bridge/_headless.py` | tries `import qgis` first; on failure adds an **OS-specific PyQGIS candidate** (Linux `/usr/share/qgis/python`; macOS `…/QGIS*.app/Contents/Resources/python`; Windows `…\QGIS*\apps\qgis\python` via glob) and retries | ✅ fixed |
+| A3 | `plugin/ui/process.py` | crash-isolation flag is **platform-aware**: `creationflags=CREATE_NEW_PROCESS_GROUP` on Windows, `start_new_session=True` on POSIX | ✅ fixed |
+| A4 | `plugin/bridge/convert.py` — `os.chmod(dir, 0o700)` | no-op on Windows (NTFS ACLs); harmless | OK as-is |
+| A5 | venv / deps tooling | `qgis-env.sh` is bash; on Windows use the manual `uv venv` against QGIS's bundled Python (§2) | manual on Windows |
 
-```python
-# A robust, cross-platform PyQGIS path, computed in the plugin process:
-import os, qgis
-PYQGIS_PATH = os.path.dirname(os.path.dirname(qgis.__file__))  # the dir holding qgis/
-```
-
-`MarimoProcessManager` can compute this once and inject it (it already builds
-`PYTHONPATH` from a list). For `_headless.py` (which runs in the notebook venv,
-not the plugin), prefer a venv built against QGIS's own interpreter so `import
-qgis` works without a hardcoded path; keep the Linux default as a fallback.
-
-**A3** — make the isolation flag platform-aware:
-
-```python
-import sys, subprocess
-kw = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if sys.platform == "win32" \
-     else {"start_new_session": True}
-subprocess.Popen([...], **kw)
-```
-
-> Track these as code changes; this plan assumes A1–A3 are applied before the
-> Windows/macOS runs (otherwise expect headless-only behaviour).
+**To verify on each platform:** open the QGIS Python Console and confirm
+`runtime.pyqgis_dir()` resolves, then run the checklist (§4) — the "🟢 Live" and
+`import qgis_bridge` steps prove A1, the headless step proves A2, and the
+crash-isolation teardown step proves A3.
 
 ---
 

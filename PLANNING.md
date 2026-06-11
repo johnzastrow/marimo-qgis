@@ -2293,6 +2293,15 @@ qgis_bridge` with no pip install. This supersedes §7 Phase 4's "publish
   **Remaining user actions:** QGIS Plugin Repository submission; Windows/macOS
   testing (the hardcoded `/usr/share/qgis/python` PYTHONPATH and `uv` launch are
   Linux-shaped — cross-platform paths still to verify).
+- 2026-06-11: **Cross-platform fixes A1–A3** (before plugin-repo submission).
+  A1: `runtime.pyqgis_dir()` derives the PyQGIS path from the running QGIS
+  (`dirname(dirname(qgis.__file__))`), used by `process.py` instead of the
+  hardcoded Linux path. A2: `_headless.py` tries `import qgis` then falls back to
+  OS-specific PyQGIS candidates (Linux/macOS/Windows globs). A3: subprocess crash
+  isolation is platform-aware (`creationflags=CREATE_NEW_PROCESS_GROUP` on
+  Windows, `start_new_session=True` on POSIX). Added a full Windows/macOS testing
+  plan at `docs/CROSS_PLATFORM_TESTING.md`. ruff + 23 tests green; `pyqgis_dir()`
+  validated to resolve under a QGIS-capable interpreter. CI passing on GitHub.
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 
