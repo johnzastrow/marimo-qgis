@@ -2,7 +2,6 @@ import os
 
 from qgis.core import Qgis, QgsApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
 
 
 def _log(message, level="info"):
@@ -104,15 +103,15 @@ class MarimoLauncherPlugin:
             self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
             self._dock.hide()  # revealed on demand from the toolbar
 
+            # Use the dock's own view-toggle action: Qt keeps it perfectly in
+            # sync with the dock's visibility (no manual two-way wiring, and no
+            # spurious flips on QGIS layout events). We just give it our icon,
+            # label and tooltip, then add it to the toolbar and Plugins menu.
             icon_path = os.path.join(self.plugin_dir, "icons", "marimoqgis.svg")
-            self._action = QAction(
-                QIcon(icon_path), "marimo Notebooks", self.iface.mainWindow()
-            )
-            self._action.setCheckable(True)
+            self._action = self._dock.toggleViewAction()
+            self._action.setIcon(QIcon(icon_path))
+            self._action.setText("marimo Notebooks")
             self._action.setToolTip("Show/hide the marimo notebook manager")
-            # Two-way sync: button toggles the dock; closing the dock unchecks it.
-            self._action.toggled.connect(self._dock.setVisible)
-            self._dock.visibilityChanged.connect(self._action.setChecked)
 
             self.iface.addToolBarIcon(self._action)
             self.iface.addPluginToMenu(self.MENU, self._action)
