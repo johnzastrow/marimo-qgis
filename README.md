@@ -1,9 +1,15 @@
 # marimo-qgis
 
-Run [marimo](https://marimo.io) reactive notebooks with 
- [QGIS 4 / PyQGIS](https://qgis.org) support on Linux.
+Run [marimo](https://marimo.io) reactive notebooks on
+[QGIS 4 / PyQGIS](https://qgis.org), launched straight from QGIS.
 
- This is a proof-of-concept and reference implementation for using marimo with QGIS spatial. The examples *workish* on Linux, but it's a little finicky to set up and not yet tested on Windows or macOS. See Platform Support below and [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for debugging tips, and contributions to improve cross-platform support are very welcome.
+The plugin runs notebooks on **QGIS's own Python interpreter** (`<qgis_python> -m
+marimo …`), discovered live from the running QGIS. Because it is the exact
+interpreter QGIS itself uses, it is always ABI-compatible with the PyQGIS
+bindings and tracks QGIS Python upgrades automatically — no version to pin, no
+separate virtualenv required. Tested on Windows (QGIS 4 / OSGeo4W) and Linux.
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for debugging tips; contributions to
+improve cross-platform coverage are very welcome.
 
 ## Version compatibility
 
@@ -11,8 +17,8 @@ Run [marimo](https://marimo.io) reactive notebooks with
 |-----------|---------|
 | QGIS | 4.0.3-Norrköping (tested); minimum 4.0 required |
 | marimo | 0.23.9 (tested); any recent release should work |
-| Python | Whatever QGIS is built against (3.14 on the test machine). Don't pin it — `./qgis-env.sh setup` matches it automatically. |
-| Platform | Linux (Ubuntu, QGIS apt repo) — tested and working |
+| Python | Whatever interpreter QGIS runs on (3.12.13 / OSGeo4W on the Windows test machine). The plugin derives it live — nothing to pin. |
+| Platform | Windows (QGIS 4 / OSGeo4W) and Linux — tested and working |
 
 The QGIS plugin (`plugin/`) declares `qgisMinimumVersion=4.0` in `metadata.txt`. It has not been tested against QGIS 3.x; the 4.x PyQGIS API is assumed throughout.
 
@@ -77,91 +83,109 @@ and per-station nearest neighbours with Pandas.
 
 ---
 
-## Quick start — Linux
+## Quick start
 
-> **Platform note**: This guide targets Linux (tested on Ubuntu with QGIS 4.0.0
-> "Norrköping"). Windows and macOS support is possible but not yet documented — the
-> main challenge on those platforms is locating the PyQGIS bindings and ensuring the
-> correct Qt6 is on the path. Contributions welcome.
+The intended workflow is: **install the plugin, install marimo into QGIS's
+Python (the plugin offers to do this for you), then launch notebooks from the
+dock.** No separate virtualenv, no `uv`, and no version pinning are required —
+notebooks run on QGIS's own interpreter.
 
 ### 1. Install QGIS 4
 
-Follow the [official QGIS installation guide](https://qgis.org/download/) for your
-distribution. On Ubuntu you can use the QGIS apt repository:
+Follow the [official QGIS installation guide](https://qgis.org/download/) for
+your platform (OSGeo4W on Windows; the QGIS apt repository on Ubuntu).
+
+### 2. Install the plugin
+
+Download `marimo_launcher.zip` from the [latest release](https://github.com/johnzastrow/marimo-qgis/releases/latest)
+(or build it yourself with `make package`), then in QGIS:
+
+**Plugins ▸ Manage and Install Plugins ▸ Install from ZIP**
+
+The QGIS plugin folder is named `marimo_launcher`. (QGIS 4 uses its own profile
+tree — e.g. on Windows `…\AppData\Roaming\QGIS\QGIS4\profiles\default\python\plugins\`.)
+
+### 3. Install marimo into QGIS's Python
+
+Notebooks run on the interpreter QGIS itself uses, so **marimo must be installed
+into that interpreter** (not into a separate venv). The easiest way: open the
+dock and try to launch a notebook — if marimo is missing, the plugin pops a
+dialog offering to run `python -m pip install marimo` into the correct
+interpreter for you. Click **Yes** and re-launch once it finishes.
+
+This also makes QGIS Python upgrades graceful: a new QGIS Python has a fresh
+site-packages with no marimo, and the plugin simply offers to reinstall.
+
+To install it manually instead, see
+[Installing marimo into QGIS's Python](#installing-marimo-into-qgiss-python) below.
+
+### 4. Launch a notebook
+
+Click the **marimo toolbar button** to open the dock, then:
+
+- **Setup tab** — review the environment report (QGIS / Python / GDAL / PROJ /
+  GEOS / Qt versions, installed packages, CLI tools) and **Download examples…**
+  to fetch this repo's `example/` and `notebooks/` folders into a folder you
+  choose.
+- **Browse tab** — point at a folder, pick a `.py` notebook, and launch it. Your
+  browser opens automatically and the notebook gets a live bridge to the running
+  QGIS project.
+- **Running tab** — the notebooks launched this session, with **Stop**.
+
+Every launch writes the notebook's stdout/stderr to a log file under
+`%TEMP%\marimo_qgis_logs\<notebook>.log` (Windows) or the OS temp dir equivalent.
+The flashing console window is suppressed. If a launched notebook dies within a
+few seconds of starting, the dock shows a dialog with the last lines of that log
+so the error isn't lost.
+
+### Running notebooks manually (optional)
+
+You normally launch from the dock, but you can run the same command yourself
+using QGIS's interpreter:
 
 ```bash
-sudo apt install qgis python3-qgis
+# <qgis_python> is the interpreter QGIS runs on — see the Setup tab's report.
+# Windows (OSGeo4W), via the QGIS Python launcher:
+& cmd /c "C:\OSGeo4W\bin\python-qgis.bat -m marimo edit example\simple_marimo_qgis.py"
+
+# Linux:
+<qgis_python> -m marimo edit example/simple_marimo_qgis.py
+<qgis_python> -m marimo run example/gpkg_summary.py
+<qgis_python> -m marimo export html example/gpkg_summary.py -o summary.html
 ```
 
-Confirm the Python bindings are present:
+> **Note on `uv` (optional, dev-only):** `uv` is **not** required to run
+> notebooks from the plugin. The `pyproject.toml`/`uv` workflow is still a fine
+> way to *develop* notebooks outside QGIS, but the plugin launch path no longer
+> uses it.
+
+---
+
+## Installing marimo into QGIS's Python
+
+marimo and any library a notebook imports must live in **QGIS's own
+interpreter** (the same one the Setup tab reports). The plugin can do this for
+you (Step 3 above); to install manually:
+
+### Windows (OSGeo4W)
+
+```powershell
+& cmd /c "C:\OSGeo4W\bin\python-qgis.bat -m pip install marimo"
+```
+
+`pip install` into the OSGeo4W Python works directly.
+
+### Linux / macOS
+
+The system or bundle Python QGIS uses is often **externally managed** (PEP 668)
+or read-only, so a plain `pip install` may be refused. In that case install into
+the per-user site with `--user`:
 
 ```bash
-ls /usr/share/qgis/python/qgis/core/__init__.py
+<qgis_python> -m pip install --user marimo
 ```
 
-### 2. Install uv
-
-[uv](https://docs.astral.sh/uv/) is the recommended package manager for this project.
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### 3. Clone this repo and create the venv
-
-```bash
-git clone https://github.com/johnzastrow/marimo-qgis.git
-cd marimo-qgis
-
-# Recommended: let the helper detect QGIS's own Python and build the venv
-# against it. No version to pin, so it keeps working across QGIS/OS upgrades.
-./qgis-env.sh setup
-```
-
-`qgis-env.sh setup` asks QGIS which interpreter loads its bindings and creates
-the venv against that exact Python with `--system-site-packages`. This avoids
-the most common failure: pinning a Python version (e.g. `3.13`) that later stops
-matching QGIS after an OS upgrade, producing `ModuleNotFoundError: No module
-named 'PyQt6'`.
-
-<details>
-<summary>Manual setup (equivalent, if you prefer not to use the script)</summary>
-
-```bash
-# Point --python at the SYSTEM interpreter QGIS actually uses (find it with
-# './qgis-env.sh path'); do NOT hardcode a version that may drift from QGIS.
-# --system-site-packages is REQUIRED so the system PyQt6 (installed alongside
-# QGIS) is visible inside the venv; without it, uv installs a bundled PyQt6
-# wheel whose Qt6 conflicts with system QGIS and fails at runtime.
-uv venv --python "$(./qgis-env.sh path)" --system-site-packages
-uv pip install marimo pandas numpy matplotlib
-```
-</details>
-
-Verify the venv finds the **system** PyQt6, not a bundled wheel (or just run
-`./qgis-env.sh doctor`, which checks this and more):
-
-```bash
-.venv/bin/python -c "import PyQt6; print(PyQt6.__file__)"
-# Must print a system path, e.g. /usr/lib/python3/dist-packages/PyQt6/__init__.py
-```
-
-### 4. Run a notebook
-
-No wrapper script or exported environment variables are needed:
-
-```bash
-# Interactive editing
-uv run marimo edit example/simple_marimo_qgis.py
-
-# View-only (no code editing)
-uv run marimo run example/gpkg_summary.py
-
-# Export to static HTML (headless, no browser needed)
-uv run marimo export html example/gpkg_summary.py -o summary.html
-```
-
-Your browser will open automatically in edit/run mode.
+(Some distributions prefer you install marimo from a system package instead.)
 
 ---
 
@@ -199,18 +223,16 @@ does not force `offscreen`) correctly inherit the real display platform.
 
 ### Do not use PEP 723 inline script metadata in QGIS notebooks
 
-When marimo is launched via `uv run`, it detects any `# /// script` block and
-**auto-sandboxes** the notebook kernel — creating a fresh isolated environment
-without `--system-site-packages`. That environment has no PyQt6, so every
-`from qgis.core import ...` fails with `ModuleNotFoundError: No module named 'PyQt6'`.
+When a notebook is launched through `uv run` (the optional dev workflow), marimo
+detects any `# /// script` block and **auto-sandboxes** the kernel — creating a
+fresh isolated environment with no access to QGIS's site-packages. That
+environment has no PyQt6, so every `from qgis.core import ...` fails with
+`ModuleNotFoundError: No module named 'PyQt6'`.
 
-**Do not add** `# /// script` blocks to QGIS notebooks. Manage dependencies
-via the project venv instead:
-
-```bash
-./qgis-env.sh setup          # detects QGIS's Python; no version pin
-# (manual equivalent: uv venv --python "$(./qgis-env.sh path)" --system-site-packages)
-```
+The plugin avoids this entirely by launching on QGIS's own interpreter rather
+than via `uv run`. Still, **do not add** `# /// script` blocks to QGIS notebooks
+so they stay safe under either launch method — rely on whatever is installed in
+QGIS's Python instead.
 
 PEP 723 headers are safe in notebooks with **no QGIS dependency** (e.g.
 `notebooks/marimo_tutorial.py`), where the isolated environment has everything it needs.
@@ -247,26 +269,55 @@ flags this as an empty cell, and nothing is displayed.
 ## QGIS plugin
 
 `plugin/` is a QGIS 4 plugin that adds a **marimo toolbar button**. Clicking it
-opens the **marimo manager panel** (a dock) where you launch any notebook in your
-browser. Launched notebooks get a live HTTP **bridge** to the running QGIS
-project — read layers, the current selection and canvas extent, and push results
-back as new layers — through the bundled `qgis_bridge` client. Without the plugin
-the same notebooks fall back to a headless `QgsApplication`.
+opens the **marimo manager panel** (a dock) with three tabs — **Setup**,
+**Browse**, and **Running** — where you check the environment, launch any
+notebook in your browser, and stop running ones. Notebooks run on QGIS's own
+Python interpreter (`<qgis_python> -m marimo …`, discovered live), so they are
+ABI-compatible with PyQGIS and can `import qgis` natively. Launched notebooks
+also get a live HTTP **bridge** to the running QGIS project — read layers, the
+current selection and canvas extent, and push results back as new layers —
+through the bundled `qgis_bridge` client. Without the plugin the same notebooks
+fall back to a headless `QgsApplication`.
+
+The **Setup tab** is the first tab. It shows an environment report (QGIS,
+Python interpreter/version/prefix, GDAL/PROJ/GEOS/SpatiaLite/Qt versions, marimo
+and uv status, a table of relevant Python packages, and detected CLI utilities
+such as `gdalinfo`, `ogr2ogr`, `spatialite`). Buttons let you **Refresh report**,
+**Save report as…** (Markdown), and **Download examples…** (fetches the repo's
+`example/` and `notebooks/` folders from GitHub into a folder you choose).
 
 ### Install from ZIP (recommended)
 
-Download `marimo_launcher.zip` from the [latest release](https://github.com/johnzastrow/marimo-qgis/releases/latest),
-then in QGIS:
+Download `marimo_launcher.zip` from the [latest release](https://github.com/johnzastrow/marimo-qgis/releases/latest)
+(or build it with `make package`), then in QGIS:
 
 **Plugins ▸ Manage and Install Plugins ▸ Install from ZIP**
 
+The plugin installs under the folder name `marimo_launcher`. QGIS 4 keeps its
+plugins in a QGIS4-specific profile tree:
+
+| Platform | Plugin folder |
+|----------|---------------|
+| Windows | `…\AppData\Roaming\QGIS\QGIS4\profiles\default\python\plugins\marimo_launcher` |
+| Linux | `~/.local/share/QGIS/QGIS4/profiles/default/python/plugins/marimo_launcher` |
+| macOS | `~/Library/Application Support/QGIS/QGIS4/profiles/default/python/plugins/marimo_launcher` |
+
 ### Install from source (development)
 
+Symlink `plugin/` into the QGIS plugins directory above. The link name
+(`marimo_launcher`) becomes the Python package name:
+
 ```bash
-# Clone the repo then symlink plugin/ into the QGIS plugins directory.
-# The symlink name (marimo_launcher) becomes the Python package name.
-ln -s /path/to/marimo_qgis/plugin \
+# Linux example
+ln -s /path/to/marimo-qgis/plugin \
       ~/.local/share/QGIS/QGIS4/profiles/default/python/plugins/marimo_launcher
+```
+
+```powershell
+# Windows example (run an elevated PowerShell, or enable Developer Mode)
+New-Item -ItemType SymbolicLink `
+  -Path "$env:APPDATA\QGIS\QGIS4\profiles\default\python\plugins\marimo_launcher" `
+  -Target "C:\path\to\marimo-qgis\plugin"
 ```
 
 Then: **Plugins ▸ Manage and Install Plugins ▸ Installed** — enable **marimo
@@ -287,8 +338,10 @@ make package   # → marimo_launcher.zip  (bundles the whole plugin/ tree + LICE
 | `plugin/__init__.py` | `classFactory()` entry point — QGIS loads this first |
 | `plugin/plugin.py` | `MarimoLauncherPlugin` — starts the bridge, adds the toolbar button + dock |
 | `plugin/bridge/` | localhost HTTP bridge to the live project (`auth`, `api`, `server`, `convert`) |
-| `plugin/ui/dock.py` | `MarimoManagerDock` — notebook list + Launch…/Stop |
-| `plugin/ui/process.py` | `MarimoProcessManager` — launches notebooks with the bridge env injected |
+| `plugin/ui/dock.py` | `MarimoManagerDock` — Setup/Browse/Running tabs; preflights marimo and surfaces launch logs |
+| `plugin/ui/process.py` | `MarimoProcessManager` — launches `<qgis_python> -m marimo` with the bridge env injected, logs to `%TEMP%\marimo_qgis_logs\` |
+| `plugin/environment.py` | `report_markdown()` env report + `download_examples()` for the Setup tab |
+| `plugin/runtime.py` | bridge handle + `qgis_python()` / `pyqgis_dir()` interpreter resolution |
 | `qgis_bridge/` | notebook-side client (QGIS-free): `QgisBridge` + `HeadlessQGIS` |
 
 The standalone `processing/launch_marimo.py` script remains available for manual
@@ -301,7 +354,7 @@ addition to the Processing Toolbox if you prefer launching without the plugin
 
 ```
 marimo-qgis/
-├── qgis-env.sh                   # detect QGIS's Python + build the venv (setup / doctor)
+├── qgis-env.sh                   # (optional, dev) detect QGIS's Python + build a venv for editing notebooks outside QGIS
 ├── notebooks/
 │   ├── stations_analysis.py      # QGIS distance matrix + Pandas analysis
 │   ├── stations.gpkg             # sample data: CWOP weather stations, Maine
@@ -317,10 +370,11 @@ marimo-qgis/
 │   ├── __init__.py               # classFactory() entry point
 │   ├── metadata.txt              # plugin name, version, QGIS minimum version
 │   ├── plugin.py                 # plugin class — starts bridge, adds toolbar/dock
-│   ├── runtime.py                # process-wide bridge handle
+│   ├── runtime.py                # bridge handle + qgis_python()/pyqgis_dir() interpreter resolution
+│   ├── environment.py            # Setup-tab env report + example downloader
 │   ├── icons/marimoqgis.svg      # toolbar icon
 │   ├── bridge/                   # localhost HTTP bridge (auth, api, server, convert)
-│   └── ui/                       # dock widget + process manager
+│   └── ui/                       # dock widget (Setup/Browse/Running) + process manager
 ├── qgis_bridge/                  # notebook-side bridge client (no QGIS dependency)
 ├── processing/
 │   └── launch_marimo.py          # standalone Processing script (no plugin needed)
@@ -335,9 +389,15 @@ marimo-qgis/
 
 | Platform | Status |
 |----------|--------|
+| Windows (QGIS 4 / OSGeo4W) | Tested and working |
 | Linux (Ubuntu, QGIS apt repo) | Tested and working |
-| Windows | Not yet documented |
-| macOS | Not yet documented |
+| macOS | Should work (same QGIS-own-interpreter model); not yet verified |
+
+The plugin runs notebooks on QGIS's own interpreter on every platform, so there
+is no separate Python/Qt6 to locate or pin — the historical Windows/macOS
+"finding the bindings" problem does not arise for the plugin launch path. The
+manual standalone instructions below remain useful if you run notebooks outside
+the plugin.
 
 ### What transfers to all platforms
 
@@ -451,10 +511,12 @@ notes to TROUBLESHOOTING.md would be very welcome.
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for documented issues including:
 
-- `ImportError: libQt6Network.so.6: undefined symbol` — the most common error, caused
-  by a PyQt6 version conflict (venv missing `--system-site-packages`)
+- The console window flashes and closes / `AssertionError: SRE module mismatch` —
+  the old `uv run` failure mode, now fixed by running on QGIS's own interpreter
+- A launched notebook exits immediately — check `%TEMP%\marimo_qgis_logs\`
+- `ImportError: libQt6Network.so.6: undefined symbol` — a PyQt6 version conflict
+  in a manually-built venv (only affects the optional standalone/`uv` workflow)
 - Cells showing no output in `marimo edit` — stale session cache
-- uv using the wrong Python version
 
 ## License
 

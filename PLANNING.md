@@ -24,10 +24,13 @@
 
 ### What marimo-qgis does today
 
-The existing repo is a **detached-process** integration:
+The existing repo is a **detached-process** integration. (Historically the
+launch was `uv run marimo edit`; the plugin now launches `<qgis_python> -m marimo`
+on QGIS's own interpreter — see the launch-model note in `README.md`/`CLAUDE.md`.
+The architecture below is unchanged by that swap.)
 
 ```
-uv run marimo edit notebook.py
+<qgis_python> -m marimo edit notebook.py
   └── marimo kernel (subprocess)
         ├── QgsApplication([], False)   # its own headless QGIS instance
         ├── initQgis()
@@ -45,8 +48,8 @@ uv run marimo edit notebook.py
   throwaway `QgsApplication`, loads its own layers from disk, and has no awareness of
   what the user has open in the desktop application.
 - **One-way data flow**: notebook reads files, cannot push results into a live project.
-- Notebooks carry Qt/offscreen boilerplate that confuses new users and breaks when
-  `uv run` sandboxes the environment (PEP 723 issue).
+- Notebooks carry Qt/offscreen boilerplate that confuses new users and (under the
+  old `uv run` dev workflow) breaks when uv sandboxes the environment (PEP 723 issue).
 - The launcher plugin is purely a `subprocess.Popen` wrapper — it adds no integration
   value once the notebook is open.
 
@@ -269,9 +272,11 @@ QGIS process
   long-term value beyond the immediate use case.
 
 - **marimo kernel isolation is preserved.** marimo's own sandbox and virtual
-  environment isolation features (`uv run`, PEP 723 headers) continue to work exactly
-  as designed. The kernel's Python environment does not need to contain QGIS libraries
-  at all — only the thin `qgis_bridge` client package.
+  environment isolation features (e.g. PEP 723 headers, or `uv run` when used as a
+  dev workflow) continue to work exactly as designed. The kernel's Python
+  environment does not need to contain QGIS libraries at all — only the thin
+  `qgis_bridge` client package. (The plugin itself launches notebooks on QGIS's
+  own interpreter, where QGIS libraries are already present.)
 
 - **marimo API changes don't affect the bridge.** If marimo changes how it starts its
   kernel, restructures its ASGI app, or switches event loop implementations, the HTTP
@@ -563,7 +568,7 @@ embedding couples them permanently; HTTP does not.
 python plugin/bridge/serve.py --port 8765
 
 # Notebooks connect to it and run analysis without QGIS desktop open
-MARIMO_QGIS_PORT=8765 MARIMO_QGIS_TOKEN=<token> uv run marimo run report.py
+MARIMO_QGIS_PORT=8765 MARIMO_QGIS_TOKEN=<token> python -m marimo run report.py
 ```
 
 A headless `QgsApplication([], False)` can run the HTTP bridge server without a
@@ -875,7 +880,8 @@ The analyst would need to use `qgis.get_selected_features()` as a manual substit
 #### Scenario 3: GIS analyst, desktop, plugin NOT installed — runs notebook from terminal
 
 **User:** A colleague receives a notebook via git. They have QGIS 4 installed but have
-not installed the marimo-qgis plugin. They run `uv run marimo edit live_layers.py`.
+not installed the marimo-qgis plugin. They run it from the terminal — e.g.
+`<qgis_python> -m marimo edit live_layers.py` (or, in a dev venv, `uv run marimo edit`).
 
 **Mode:** HeadlessQGIS fallback (no env vars → `QgisBridge()` raises → `HeadlessQGIS`).
 
@@ -1235,7 +1241,8 @@ Yes, in two ways:
 `QgisBridge()` raises `RuntimeError` and the notebook can catch it and fall back to
 `HeadlessQGIS`, which initialises its own `QgsApplication` from disk files. This is
 the existing marimo-qgis behaviour, unchanged. The notebook is portable: it runs from
-the terminal with `uv run marimo edit notebook.py` without the plugin installed at all.
+the terminal with `<qgis_python> -m marimo edit notebook.py` (or `uv run marimo edit`
+in a dev venv) without the plugin installed at all.
 
 ```python
 @app.cell
@@ -1256,7 +1263,7 @@ the plugin package, not in `qgis_bridge` (the QGIS-free client):
 
 ```bash
 python plugin/bridge/serve.py --port 8765   # no QGIS desktop, but QGIS must be installed
-MARIMO_QGIS_PORT=8765 MARIMO_QGIS_TOKEN=... uv run marimo run report.py
+MARIMO_QGIS_PORT=8765 MARIMO_QGIS_TOKEN=... python -m marimo run report.py
 ```
 
 This enables CI pipelines and Docker deployments. When running standalone, operations
@@ -1492,8 +1499,8 @@ separate `QgsApplication` or writing any boilerplate.
 - [ ] `plugin/bridge/auth.py` — generate UUID session token at server start; validate
   on every request via `Authorization: Bearer <token>` header
 - [ ] `plugin/ui/process.py` — `MarimoProcessManager`: `subprocess.Popen` for
-  `uv run marimo edit <notebook>`, inject `MARIMO_QGIS_PORT` and
-  `MARIMO_QGIS_TOKEN` into subprocess env
+  `<qgis_python> -m marimo edit <notebook>` (QGIS's own interpreter), inject
+  `MARIMO_QGIS_PORT` and `MARIMO_QGIS_TOKEN` into subprocess env
 - [ ] `plugin/plugin.py` — start `QgisBridgeServer` on plugin load; stop + clean up
   temp files on plugin unload; wire plugin state machine
   (`UNINITIALIZED → READY` on server bind)
@@ -1926,7 +1933,7 @@ Phase 4 checklist additions:
 # example/live_layers.py
 # Requires: marimo-qgis plugin loaded in QGIS, bridge server running.
 # Launch from the plugin dock, or from terminal:
-#   uv run marimo edit example/live_layers.py
+#   <qgis_python> -m marimo edit example/live_layers.py
 # The plugin injects MARIMO_QGIS_PORT and MARIMO_QGIS_TOKEN into the subprocess env.
 
 import marimo

@@ -23,14 +23,24 @@ from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir, qgis_python
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+# Cache of interpreters known to have marimo. Probing costs a full interpreter
+# startup + `import marimo` (~1.5s), so we run it at most once per interpreter per
+# session. Only positive results are cached: a negative stays uncached so that an
+# install (or a later fix) is picked up on the next launch without a restart.
+_MARIMO_OK = set()
+
+
 def marimo_available(python_exe=None):
     """True if `import marimo` succeeds in the given (or QGIS's) interpreter.
 
     Used as a preflight so a missing install — e.g. after QGIS upgrades to a new
     Python with a fresh site-packages — produces a clear, actionable prompt
-    instead of a process that dies on `ModuleNotFoundError`.
+    instead of a process that dies on `ModuleNotFoundError`. The (expensive)
+    subprocess probe is cached after the first success to keep launches snappy.
     """
     python_exe = python_exe or qgis_python()
+    if python_exe in _MARIMO_OK:
+        return True
     try:
         result = subprocess.run(
             [python_exe, "-c", "import marimo"],
@@ -38,9 +48,12 @@ def marimo_available(python_exe=None):
             timeout=60,
             creationflags=_NO_WINDOW if sys.platform == "win32" else 0,
         )
-        return result.returncode == 0
     except Exception:  # noqa: BLE001 — treat any failure as "not available"
         return False
+    if result.returncode == 0:
+        _MARIMO_OK.add(python_exe)
+        return True
+    return False
 
 
 def log_dir():

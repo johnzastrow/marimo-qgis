@@ -1,13 +1,35 @@
-# Troubleshooting: Marimo + QGIS4 on Linux
+# Troubleshooting: Marimo + QGIS4
 
-This document captures every issue encountered running [marimo](https://marimo.io)
-notebooks that use PyQGIS (QGIS4 Python bindings) on Ubuntu Linux with a desktop
-session. Written so that the next person (or next session) can skip the two-day
-debugging tour.
+This document captures issues encountered running [marimo](https://marimo.io)
+notebooks that use PyQGIS (QGIS4 Python bindings). Written so that the next
+person (or next session) can skip the multi-day debugging tour.
+
+**Current launch model:** the plugin runs notebooks on **QGIS's own Python
+interpreter** (`<qgis_python> -m marimo …`, derived live from the running QGIS).
+This is always ABI-compatible with the PyQGIS bindings and tracks QGIS Python
+upgrades automatically. Several entries below describe the **older `uv run`
+workflow** (now optional/dev-only) and the failures that motivated the switch —
+they are kept for context and for anyone still developing notebooks in a
+standalone `uv` venv outside QGIS.
 
 ---
 
 ## System Context
+
+### Windows (current primary test machine)
+
+| Component | Version / Path |
+|-----------|----------------|
+| QGIS | 4.0.3-Norrköping |
+| Python | 3.12.13 at `C:\OSGeo4W\apps\Python312\python.exe` (OSGeo4W) |
+| GDAL / PROJ / GEOS | 3.13.1 / 9.8.1 / 3.14.1 |
+| SpatiaLite / SQLite | 5.1.0 / 3.53.2 |
+| Qt / PyQt | 6.11.0 / 6.11.0 |
+| marimo | 0.23.9 |
+
+Smoke test: `python -m marimo export html notebooks/qgis_test.py` exits 0.
+
+### Linux (original dev machine)
 
 | Component | Version / Path |
 |-----------|----------------|
@@ -15,9 +37,8 @@ debugging tour.
 | QGIS Python bindings | `/usr/share/qgis/python` |
 | System Qt6 | 6.9.2 (`/lib/x86_64-linux-gnu/libQt6Core.so.6`) |
 | System PyQt6 | `/usr/lib/python3/dist-packages/PyQt6/` |
-| Python | 3.14.4 (system) — must match QGIS's compiled bindings; don't pin a fixed version |
+| Python | matches QGIS's compiled bindings — don't pin a fixed version |
 | marimo | 0.23.9 |
-| uv | for package management |
 | OS | Ubuntu "Questing" (development build) |
 
 ---
@@ -56,7 +77,50 @@ inherit:
 
 ## Issues and Fixes
 
+### Issue 0: Console window flashes and closes / `AssertionError: SRE module mismatch` (Windows)
+
+**Symptom**: On Windows, launching a notebook (under the old `uv run` model) opened
+a console window that flashed and vanished instantly, with no visible error. If
+you managed to read it, the traceback ended in:
+
+```
+AssertionError: SRE module mismatch
+```
+
+**Root cause**: `uv run` built a Python **3.14** virtualenv (because
+`pyproject.toml` declared `requires-python>=3.13`), but QGIS on Windows runs
+Python **3.12** (OSGeo4W). The 3.14 interpreter then loaded QGIS's 3.12 standard
+library, and the `_sre` regex module's C and Python halves came from different
+minor versions — hence the assertion. This is the same family of problem as the
+PyQt6/Qt6 conflicts on Linux: a separate interpreter cannot safely load another
+interpreter's compiled modules.
+
+**Fix (already in place)**: The plugin no longer uses `uv run`. It launches on
+**QGIS's own interpreter** (`<qgis_python> -m marimo …`, via
+`runtime.qgis_python()`), so the running interpreter and QGIS's stdlib/bindings
+always match. This eliminates the entire mismatch class.
+
+**If you still see a notebook exit immediately**: the console window is now
+suppressed (CREATE_NO_WINDOW) and output is captured to a log. Open the log:
+
+```
+%TEMP%\marimo_qgis_logs\<notebook>.log        (Windows)
+$TMPDIR / /tmp + /marimo_qgis_logs/<notebook>.log   (Linux/macOS)
+```
+
+The dock also pops a dialog with the **last 40 lines** of that log if a launched
+notebook process dies within ~3 seconds. The most common remaining cause is
+**marimo not installed in QGIS's Python** — the dock detects this on launch
+(`marimo_available()`) and offers to `pip install marimo` into the right
+interpreter; accept and re-launch.
+
+---
+
 ### Issue 1: Qt Symbol Error — `undefined symbol: Qt_6_PRIVATE_API`
+
+> **Scope:** this affects the **optional standalone / `uv` dev workflow**, not the
+> plugin launch path (which runs on QGIS's own interpreter). Relevant if you edit
+> notebooks in a separate `uv` venv outside QGIS.
 
 **Error** (shown in marimo browser console, not in terminal):
 
@@ -151,6 +215,9 @@ nothing: the cache is stale, but the export is fresh.
 
 ### Issue 3: PyQt6 / Qt6 Version Mismatch (venv without system-site-packages)
 
+> **Scope:** standalone / `uv` dev workflow only. The plugin avoids this by using
+> QGIS's own interpreter (which already has PyQt6).
+
 **Error**:
 
 ```
@@ -188,6 +255,9 @@ interpreter QGIS uses (let the helper detect it rather than pinning a version):
 ---
 
 ### Issue 4: uv Ignores `--python` and Uses Wrong Version
+
+> **Scope:** standalone / `uv` dev workflow only. Not applicable to the plugin,
+> which never builds a venv — it runs `<qgis_python> -m marimo` directly.
 
 **Symptom**: `uv venv --python <version>` creates a venv on a *different* Python
 than requested (e.g. a 3.12 venv). Cells then fail with an incompatibility or a
@@ -335,6 +405,11 @@ When something works in `marimo export html` but fails in `marimo edit`:
 
 ## Working Configuration
 
+> The configuration below is the **standalone Linux dev setup** (running notebooks
+> in a separate `uv` venv outside QGIS). For the **plugin**, there is no wrapper
+> script or venv — it launches `<qgis_python> -m marimo` directly and injects
+> `PYTHONPATH` itself; just install marimo into QGIS's Python.
+
 ### Wrapper Script (`marimo-qgis`)
 
 ```bash
@@ -411,8 +486,9 @@ The notebook didn't receive the bridge connection. Causes, most common first:
   started.
 - **The notebook was opened before the bridge started**, or in a tab left over
   from a previous session. Close it and **Launch it again** from the dock.
-- **You ran it from the terminal** (`uv run marimo edit …`) instead of from the
-  dock. Terminal launches have no bridge env, so headless is correct there.
+- **You ran it from the terminal** (`<qgis_python> -m marimo edit …`, or the old
+  `uv run`) instead of from the dock. Terminal launches have no bridge env, so
+  headless is correct there.
 
 ### `bridge failed to start: …` in the "marimo bridge" log
 
@@ -433,8 +509,20 @@ repo root to `sys.path` themselves — only works when run from inside the repo.
 
 `get_layer` / `get_selected_features` / `insert_layer` read FlatGeobuf into a
 GeoDataFrame and need **geopandas**; raster `get_layer` needs **rioxarray**
-(optional). Install into the notebook venv: `./qgis-env.sh setup` (adds
-geopandas), and `uv pip install rioxarray` if you fetch rasters.
+(optional). Install them into **QGIS's own Python** (the same interpreter that
+runs the notebook — see the Setup tab for its path):
+
+```powershell
+# Windows (OSGeo4W)
+& cmd /c "C:\OSGeo4W\bin\python-qgis.bat -m pip install geopandas rioxarray"
+```
+
+```bash
+# Linux / macOS (add --user if the interpreter is externally managed)
+<qgis_python> -m pip install geopandas rioxarray
+```
+
+The Setup tab's package table shows which of these are already present.
 
 ### `BridgeError: bridge 401` / `bridge unreachable`
 
@@ -446,4 +534,6 @@ geopandas), and `uv pip install rioxarray` if you fetch rasters.
 ### Plugin won't enable / not listed
 
 The plugin requires **QGIS 4.0+** (`qgisMinimumVersion=4.0`). On QGIS 3 it will
-not load. `uv` must be on `PATH` for the dock to launch notebooks.
+not load. `uv` is **not** required — the dock launches notebooks with QGIS's own
+interpreter. You do need **marimo installed into QGIS's Python**; the dock
+detects a missing marimo on launch and offers to install it.
