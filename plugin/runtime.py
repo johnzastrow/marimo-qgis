@@ -89,6 +89,38 @@ def pyqgis_dir():
         return None
 
 
+def qgis_python():
+    """Absolute path to the Python interpreter QGIS itself is running on.
+
+    Derived from the LIVE interpreter so it tracks QGIS's Python across version
+    upgrades with no hardcoded version: when QGIS moves from 3.12 to a future
+    3.x, `sys.prefix` moves with it and this returns the new `python.exe`.
+
+    Launching notebooks with QGIS's own interpreter guarantees ABI compatibility
+    with the PyQGIS bindings (no stdlib/_sre mismatch) and lets the notebook
+    `import qgis` natively. On Windows QGIS embeds Python and `sys.executable`
+    can point at a launcher, so we build from `sys.prefix`; on Unix/macOS
+    `sys.executable` is normally the interpreter itself.
+    """
+    if sys.platform == "win32":
+        for name in ("python.exe", "pythonw.exe"):
+            cand = os.path.join(sys.prefix, name)
+            if os.path.isfile(cand):
+                return cand
+    else:
+        exe = sys.executable
+        if exe and os.path.basename(exe).lower().startswith("python") and os.path.isfile(exe):
+            return exe
+        for cand in (
+            os.path.join(sys.prefix, "bin", "python3"),
+            os.path.join(sys.prefix, "bin", "python"),
+        ):
+            if os.path.isfile(cand):
+                return cand
+    # Last resort: the running interpreter (may be the embedding host).
+    return sys.executable or "python3"
+
+
 def set_server(server):
     """Record the running QgisBridgeServer (or None to clear on unload)."""
     global _server

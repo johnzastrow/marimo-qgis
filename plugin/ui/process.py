@@ -1,8 +1,10 @@
 """MarimoProcessManager — launches and tracks marimo notebook subprocesses.
 
-Each notebook runs in its own OS process (crash isolation via
-`start_new_session=True`, so a runaway cell cannot take QGIS down). The bridge
-connection (`MARIMO_QGIS_PORT` / `MARIMO_QGIS_TOKEN`) is injected into the
+Notebooks run on QGIS's OWN Python interpreter (via `<qgis_python> -m marimo`),
+discovered live from the running QGIS so it tracks Python upgrades automatically
+and is always ABI-compatible with the PyQGIS bindings. Each notebook runs in its
+own OS process (crash isolation, so a runaway cell cannot take QGIS down). The
+bridge connection (`MARIMO_QGIS_PORT` / `MARIMO_QGIS_TOKEN`) is injected into the
 subprocess environment so the notebook's `qgis_bridge.QgisBridge()` can reach the
 live QGIS project.
 
@@ -13,26 +15,63 @@ from `plugin.runtime.bridge_env()`.
 import os
 import subprocess
 import sys
+import tempfile
 
-from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir, uv_executable
+from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir, qgis_python
+
+# Windows: keep child consoles from flashing; output is captured to the log.
+_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def marimo_available(python_exe=None):
+    """True if `import marimo` succeeds in the given (or QGIS's) interpreter.
+
+    Used as a preflight so a missing install — e.g. after QGIS upgrades to a new
+    Python with a fresh site-packages — produces a clear, actionable prompt
+    instead of a process that dies on `ModuleNotFoundError`.
+    """
+    python_exe = python_exe or qgis_python()
+    try:
+        result = subprocess.run(
+            [python_exe, "-c", "import marimo"],
+            capture_output=True,
+            timeout=60,
+            creationflags=_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        return result.returncode == 0
+    except Exception:  # noqa: BLE001 — treat any failure as "not available"
+        return False
+
+
+def log_dir():
+    """Directory holding per-notebook launch logs (created if missing)."""
+    path = os.path.join(tempfile.gettempdir(), "marimo_qgis_logs")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _log_path_for(notebook_path):
+    """A stable per-notebook log path (overwritten on each launch)."""
+    base = os.path.splitext(os.path.basename(notebook_path))[0] or "notebook"
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in base)
+    return os.path.join(log_dir(), safe + ".log")
 
 
 class MarimoProcessManager:
     """Launches marimo notebooks and tracks the live subprocesses."""
 
     def __init__(self):
-        # Each record: {"path": str, "mode": str, "proc": Popen}
+        # Each record: {"path": str, "mode": str, "proc": Popen, "log": str,
+        #               "_fh": file handle (closed when the process is pruned)}
         self._records = []
 
     def launch(self, notebook_path, mode="edit", cwd=None):
-        """Launch `marimo <mode> <notebook_path>` with the bridge env injected.
+        """Launch `<qgis_python> -m marimo <mode> <notebook_path>`.
 
-        Returns the Popen handle. Raises FileNotFoundError if `uv` cannot be
-        located (not on PATH and not in any known install location).
+        Runs on QGIS's own interpreter with the bridge env injected. Returns the
+        record dict (includes "proc" and "log").
         """
-        uv = uv_executable()
-        if uv is None:
-            raise FileNotFoundError("uv")
+        python_exe = qgis_python()
 
         env = os.environ.copy()
         # PYTHONPATH for the notebook process: the PyQGIS bindings (discovered
@@ -48,31 +87,72 @@ class MarimoProcessManager:
         env.pop("QT_QPA_PLATFORM", None)
         # Connect the notebook to the live bridge (no-op if no server running).
         env.update(bridge_env())
-        # Ensure uv's own directory is on the child PATH so any tools uv spawns
-        # (and uv itself, if it re-execs) resolve even when QGIS scrubbed PATH.
-        uv_dir = os.path.dirname(uv)
-        env["PATH"] = uv_dir + os.pathsep + env.get("PATH", "")
 
         # Crash isolation: give the notebook its own process group so a runaway
         # cell cannot take QGIS down. The mechanism differs by platform.
         if sys.platform == "win32":
-            isolation = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+            # CREATE_NO_WINDOW: stdout/stderr are captured to the log below, so
+            # we suppress the flashing console window that otherwise opens (and
+            # vanished too fast to read any error). CREATE_NEW_PROCESS_GROUP keeps
+            # crash isolation.
+            isolation = {
+                "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | _NO_WINDOW
+            }
         else:
             isolation = {"start_new_session": True}
 
+        run_cwd = cwd or os.path.dirname(notebook_path)
+        cmd = [python_exe, "-m", "marimo", mode, notebook_path]
+
+        # Capture all subprocess output to a log file so failures are visible
+        # (the console window closing instantly otherwise hides every error).
+        log_path = _log_path_for(notebook_path)
+        fh = open(log_path, "w", encoding="utf-8", errors="replace")
+        fh.write("=== marimo launch ===\n")
+        fh.write("command : " + subprocess.list2cmdline(cmd) + "\n")
+        fh.write("cwd     : " + run_cwd + "\n")
+        fh.write("python  : " + python_exe + "\n")
+        fh.write("PYTHONPATH: " + env.get("PYTHONPATH", "") + "\n")
+        fh.write("bridge  : " + ("connected" if bridge_env() else "none") + "\n")
+        fh.write("=" * 40 + "\n\n")
+        fh.flush()
+
         proc = subprocess.Popen(
-            [uv, "run", "marimo", mode, notebook_path],
-            cwd=cwd or os.path.dirname(notebook_path),
+            cmd,
+            cwd=run_cwd,
             env=env,
+            stdout=fh,
+            stderr=subprocess.STDOUT,
             **isolation,
         )
-        self._records.append({"path": notebook_path, "mode": mode, "proc": proc})
-        return proc
+        record = {
+            "path": notebook_path,
+            "mode": mode,
+            "proc": proc,
+            "log": log_path,
+            "_fh": fh,
+        }
+        self._records.append(record)
+        return record
 
     def running(self):
         """Return records for still-running notebooks (prunes exited ones)."""
-        self._records = [r for r in self._records if r["proc"].poll() is None]
+        alive, dead = [], []
+        for r in self._records:
+            (alive if r["proc"].poll() is None else dead).append(r)
+        for r in dead:  # close log handles for processes that have exited
+            self._close_log(r)
+        self._records = alive
         return list(self._records)
+
+    @staticmethod
+    def _close_log(record):
+        fh = record.get("_fh")
+        if fh is not None and not fh.closed:
+            try:
+                fh.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     def stop(self, proc):
         """Terminate one launched notebook process group (best effort)."""
@@ -85,4 +165,5 @@ class MarimoProcessManager:
         """Terminate every tracked notebook (used only if explicitly requested)."""
         for record in self._records:
             self.stop(record["proc"])
+            self._close_log(record)
         self._records = []

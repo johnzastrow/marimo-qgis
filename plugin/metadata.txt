@@ -12,8 +12,10 @@ about=Adds a toolbar button that opens the "marimo" manager panel, where you can
     (read layers, selection and canvas extent; push results back as new layers)
     via the bundled qgis_bridge client; they also have full PyQGIS access.
 
-    Requires uv (https://docs.astral.sh/uv/) on PATH and a project virtualenv
-    created with --system-site-packages so the notebook kernel can import PyQt6.
+    Notebooks run on QGIS's own Python interpreter (discovered automatically, so
+    it tracks QGIS Python upgrades and stays ABI-compatible with PyQGIS). marimo
+    just needs to be installed in that interpreter; the plugin offers to install
+    it on first launch if it is missing.
 
 tracker=https://github.com/johnzastrow/marimo-qgis/issues
 repository=https://github.com/johnzastrow/marimo-qgis

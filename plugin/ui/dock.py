@@ -10,9 +10,11 @@ All Qt imports go through `qgis.PyQt` (D3) so the code works on Qt5 and Qt6.
 """
 
 import os
+import subprocess
+import sys
 
-from qgis.core import QgsProject, QgsSettings
-from qgis.PyQt.QtCore import Qt
+from qgis.core import QgsApplication, QgsProject, QgsSettings, QgsTask
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtWidgets import (
     QDockWidget,
     QFileDialog,
@@ -22,12 +24,16 @@ from qgis.PyQt.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from ..environment import download_examples, report_markdown
+from ..runtime import qgis_python
+from .process import marimo_available
 from .scaffold import qgis_bridge_root, scaffold_notebook
 
 _DIR_SETTING = "marimo/browse_dir"
@@ -59,11 +65,105 @@ class MarimoManagerDock(QDockWidget):
         layout.addWidget(self._status)
 
         tabs = QTabWidget(container)
+        tabs.addTab(self._build_setup_tab(), "Setup")
         tabs.addTab(self._build_browse_tab(), "Browse")
         tabs.addTab(self._build_running_tab(), "Running")
         layout.addWidget(tabs)
 
         self.setWidget(container)
+
+    def _build_setup_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        intro = QLabel(
+            "Inspect the QGIS Python environment your notebooks run on, save a "
+            "report to share, or download the example notebooks.",
+            tab,
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self._env_text = QPlainTextEdit(tab)
+        self._env_text.setReadOnly(True)
+        self._env_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        layout.addWidget(self._env_text)
+
+        buttons = QHBoxLayout()
+        refresh = QPushButton("Refresh report", tab)
+        refresh.clicked.connect(self._on_refresh_report)
+        save = QPushButton("Save report as…", tab)
+        save.setToolTip("Write the environment report to a Markdown file")
+        save.clicked.connect(self._on_save_report)
+        download = QPushButton("Download examples…", tab)
+        download.setToolTip(
+            "Fetch the example/ and notebooks/ folders from GitHub into a folder"
+        )
+        download.clicked.connect(self._on_download_examples)
+        for widget in (refresh, save, download):
+            buttons.addWidget(widget)
+        layout.addLayout(buttons)
+
+        # Populate the report once the panel is constructed.
+        self._on_refresh_report()
+        return tab
+
+    def _on_refresh_report(self):
+        self._env_text.setPlainText(report_markdown())
+
+    def _on_save_report(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save environment report",
+            os.path.join(self._browse_dir, "qgis_environment.md"),
+            "Markdown (*.md);;All files (*)",
+        )
+        if not path:
+            return
+        if not os.path.splitext(path)[1]:
+            path += ".md"
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(self._env_text.toPlainText())
+        except OSError as exc:
+            QMessageBox.warning(self, "Setup", f"Could not save report:\n{exc}")
+            return
+        self._status.setText(f"Saved environment report to {path}")
+
+    def _on_download_examples(self):
+        dest = QFileDialog.getExistingDirectory(
+            self, "Where should the examples be saved?", self._browse_dir
+        )
+        if not dest:
+            return
+        self._status.setText("Downloading examples from GitHub…")
+
+        def _work(task):
+            return download_examples(
+                dest,
+                branch="main",
+                folders=("example", "notebooks"),
+                progress=task.setProgress,
+            )
+
+        def _done(exception, result=None):
+            if exception is not None:
+                QMessageBox.warning(
+                    self, "Download examples", f"Download failed:\n{exception}"
+                )
+                self._status.setText("Example download failed.")
+                return
+            count = len(result or [])
+            self._status.setText(f"Downloaded {count} files to {dest}")
+            # Jump the Browse tab to the freshly downloaded notebooks.
+            notebooks = os.path.join(dest, "notebooks")
+            self._set_dir(notebooks if os.path.isdir(notebooks) else dest)
+
+        # Run off the UI thread so QGIS stays responsive during the download.
+        self._dl_task = QgsTask.fromFunction(
+            "Download marimo-qgis examples", _work, on_finished=_done
+        )
+        QgsApplication.taskManager().addTask(self._dl_task)
 
     def _build_browse_tab(self):
         tab = QWidget()
@@ -170,16 +270,84 @@ class MarimoManagerDock(QDockWidget):
             self._set_dir(directory)
 
     def _launch(self, path):
-        try:
-            self._pm.launch(path, mode="edit")
-        except FileNotFoundError:
-            self._status.setText(
-                "✗ 'uv' not found. Install uv, then either restart QGIS so it "
-                "inherits your PATH, or set the MARIMO_QGIS_UV env var to the "
-                "full path of uv.exe."
-            )
+        if not self._ensure_marimo():
             return
+        record = self._pm.launch(path, mode="edit")
+        self._status.setText(
+            f"Launching {os.path.basename(path)} … log: {record['log']}"
+        )
+        # marimo's web server takes a moment to come up; if the process is already
+        # gone shortly after launch it died on startup — surface the log so the
+        # error isn't lost with the (now suppressed) console window.
+        QTimer.singleShot(3000, lambda: self._check_early_exit(record))
         self.refresh()
+
+    def _ensure_marimo(self):
+        """Preflight: ensure marimo is importable in QGIS's Python; offer to
+        install it if not.
+
+        This is what makes a QGIS Python upgrade graceful — after an upgrade the
+        new interpreter has a fresh site-packages with no marimo, and instead of
+        a notebook that dies on ModuleNotFoundError the user gets a clear prompt
+        to reinstall into the (newly-detected) interpreter.
+        """
+        if marimo_available():
+            return True
+        py = qgis_python()
+        reply = QMessageBox.question(
+            self,
+            "Install marimo?",
+            "marimo is not installed in QGIS's Python:\n"
+            f"  {py}\n\n"
+            "Install it now? This runs:\n"
+            f"  python -m pip install marimo\n\n"
+            "A console window shows progress; re-launch the notebook once it "
+            "finishes.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            self._status.setText("marimo is required to launch notebooks.")
+            return False
+        # Run pip in a visible console so the user can watch the (sometimes slow)
+        # install, and keep QGIS responsive by not blocking on it.
+        try:
+            flags = (
+                subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0
+            )
+            subprocess.Popen([py, "-m", "pip", "install", "marimo"], creationflags=flags)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(
+                self, "marimo", f"Could not start the install:\n{exc}"
+            )
+            return False
+        self._status.setText(
+            "Installing marimo in a console window — re-launch the notebook "
+            "once it completes."
+        )
+        return False
+
+    def _check_early_exit(self, record):
+        proc = record["proc"]
+        if proc.poll() is None:
+            return  # still running — healthy
+        tail = self._read_log_tail(record["log"])
+        QMessageBox.warning(
+            self,
+            "marimo notebook exited",
+            f"The notebook process exited (code {proc.returncode}) right after "
+            f"launch.\n\nLog file:\n{record['log']}\n\n"
+            f"--- last output ---\n{tail}",
+        )
+
+    @staticmethod
+    def _read_log_tail(log_path, max_lines=40):
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as handle:
+                lines = handle.readlines()
+        except OSError as exc:
+            return f"(could not read log: {exc})"
+        tail = lines[-max_lines:]
+        return "".join(tail).strip() or "(log was empty)"
 
     def _on_launch_file(self):
         item = self._file_list.currentItem()
