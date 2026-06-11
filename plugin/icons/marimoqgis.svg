@@ -4,7 +4,7 @@
 <svg
    width="180"
    height="180"
-   viewBox="0 0 47.624999 47.625"
+   viewBox="0 0 47.625 47.625"
    version="1.1"
    id="svg1"
    xml:space="preserve"
@@ -24,8 +24,8 @@
      inkscape:deskcolor="#d1d1d1"
      inkscape:document-units="mm"
      inkscape:zoom="1.4142136"
-     inkscape:cx="344.00745"
-     inkscape:cy="351.43207"
+     inkscape:cx="344.00744"
+     inkscape:cy="351.43206"
      inkscape:window-width="2560"
      inkscape:window-height="1389"
      inkscape:window-x="0"
@@ -67,7 +67,7 @@
      inkscape:groupmode="layer"
      id="layer1"><g
        id="g3"
-       transform="translate(-61.534611,-47.28486)"><g
+       transform="translate(-61.534611,-47.225745)"><g
          id="g1"
          transform="matrix(1.0937097,0,0,1.0937097,-7.9232919,-6.6569739)"><circle
            style="fill:none;fill-opacity:1;stroke:#1c7361;stroke-width:2.38125;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
@@ -83,16 +83,16 @@
          id="g2"
          transform="translate(-0.70949566,-0.6647138)"><polygon
            fill="#ee7913"
-           points="195,180 216.513,180 198.306,162 176,162 176,183.433 195,202.37 "
+           points="198.306,162 176,162 176,183.433 195,202.37 195,180 216.513,180 "
            id="polygon3"
            transform="matrix(0.26458333,0,0,0.26458333,37.704032,26.788049)" /><polygon
            fill="url(#SVGID_4_)"
-           points="204,189 204,211.34 240.782,248 264,248 264,226.946 225.617,189 "
+           points="240.782,248 264,248 264,226.946 225.617,189 204,189 204,211.34 "
            id="polygon31"
            style="display:inline;fill:url(#SVGID_4_)"
            transform="matrix(0.26458333,0,0,0.26458333,37.704032,26.788049)" /><polygon
            fill="#f0e64a"
-           points="204,189 225.617,189 216.513,180 195,180 195,202.37 204,211.34 "
+           points="216.513,180 195,180 195,202.37 204,211.34 204,189 225.617,189 "
            id="polygon33"
            transform="matrix(0.26458333,0,0,0.26458333,37.704032,26.788049)" /><path
            d="m 84.270702,69.650548 23.283328,22.754167 v -5.57072 l -10.155448,-10.039697 -2.40864,-2.38125 -4.81728,-4.7625 z"
