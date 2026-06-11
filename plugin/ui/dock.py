@@ -10,6 +10,7 @@ All Qt imports go through `qgis.PyQt` (D3) so the code works on Qt5 and Qt6.
 """
 
 import os
+import re
 
 from qgis.core import QgsApplication, QgsProject, QgsSettings, QgsTask
 from qgis.PyQt.QtCore import Qt, QTimer
@@ -31,7 +32,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..environment import download_examples, report_markdown
 from ..runtime import qgis_python
-from .process import marimo_available
+from .process import marimo_available, validate_package_names
 from .scaffold import qgis_bridge_root, scaffold_notebook
 
 _DIR_SETTING = "marimo/browse_dir"
@@ -103,9 +104,73 @@ class MarimoManagerDock(QDockWidget):
             buttons.addWidget(widget)
         layout.addLayout(buttons)
 
+        # Install extra Python packages into QGIS's own interpreter (the one the
+        # notebooks run on). They MUST go here, not into a separate venv — a
+        # venv has no PyQGIS and reintroduces the ABI mismatch the launch model
+        # exists to avoid. Uses the same cross-platform pip bootstrap as the
+        # marimo preflight.
+        pkg_label = QLabel(
+            "Install Python packages into QGIS's Python (e.g. geopandas, "
+            "rasterio). Notebooks pick them up on next launch.",
+            tab,
+        )
+        pkg_label.setWordWrap(True)
+        layout.addWidget(pkg_label)
+
+        pkg_row = QHBoxLayout()
+        self._pkg_edit = QLineEdit(tab)
+        self._pkg_edit.setPlaceholderText("geopandas rasterio shapely>=2.0")
+        self._pkg_edit.returnPressed.connect(self._on_install_packages)
+        pkg_install = QPushButton("Install", tab)
+        pkg_install.setToolTip("Install the listed packages into QGIS's Python")
+        pkg_install.clicked.connect(self._on_install_packages)
+        pkg_row.addWidget(self._pkg_edit)
+        pkg_row.addWidget(pkg_install)
+        layout.addLayout(pkg_row)
+
         # Populate the report once the panel is constructed.
         self._on_refresh_report()
         return tab
+
+    def _on_install_packages(self):
+        """Validate the Setup-tab package field and start a tracked install."""
+        try:
+            packages = validate_package_names(self._pkg_edit.text())
+        except ValueError as exc:
+            QMessageBox.warning(self, "Install packages", str(exc))
+            return
+        if self._install_record is not None:
+            QMessageBox.information(
+                self,
+                "Install packages",
+                "An install is already in progress — please wait for it to "
+                "finish.",
+            )
+            return
+        py = qgis_python()
+        reply = QMessageBox.question(
+            self,
+            "Install packages?",
+            "Install into QGIS's Python:\n"
+            f"  {py}\n\n  " + ", ".join(packages) + "\n\n"
+            "This runs pip (falling back to a per-user install where the system "
+            "Python is read-only). Proceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._install_record = self._pm.install_packages(packages)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(
+                self, "Install packages", f"Could not start the install:\n{exc}"
+            )
+            return
+        self._status.setText(
+            "Installing " + ", ".join(packages) + " … you'll be notified when "
+            "it finishes."
+        )
+        QTimer.singleShot(1500, self._check_install)
 
     def _on_refresh_report(self):
         self._env_text.setPlainText(report_markdown())
@@ -326,7 +391,12 @@ class MarimoManagerDock(QDockWidget):
         return False
 
     def _check_install(self):
-        """Poll the in-flight `pip install marimo` and report when it finishes."""
+        """Poll the in-flight pip install and report when it finishes.
+
+        Shared by the marimo preflight and the Setup-tab package installer — the
+        message is driven by the record's "packages" so both paths get a clear,
+        accurate result (success notice or failure dialog with the log tail).
+        """
         record = self._install_record
         if record is None:
             return
@@ -337,24 +407,23 @@ class MarimoManagerDock(QDockWidget):
 
         self._install_record = None
         self._pm.reap_install(record)
-        if proc.returncode == 0 and marimo_available():
-            self._status.setText(
-                "marimo installed — launch a notebook to start."
-            )
+        pkgs = ", ".join(record.get("packages", [])) or "packages"
+        if proc.returncode == 0:
+            self._status.setText(f"Installed: {pkgs}")
             QMessageBox.information(
                 self,
-                "marimo installed",
-                "marimo was installed into QGIS's Python.\nYou can now launch "
-                "notebooks.",
+                "Install complete",
+                f"Installed into QGIS's Python:\n  {pkgs}\n\nLaunched notebooks "
+                "pick this up on their next start.",
             )
         else:
             tail = self._read_log_tail(record["log"])
-            self._status.setText("marimo install failed — see the dialog.")
+            self._status.setText(f"Install of {pkgs} failed — see the dialog.")
             QMessageBox.warning(
                 self,
-                "marimo install failed",
-                f"pip exited with code {proc.returncode}.\n\nLog file:\n"
-                f"{record['log']}\n\n--- last output ---\n{tail}",
+                "Install failed",
+                f"pip exited with code {proc.returncode} installing {pkgs}.\n\n"
+                f"Log file:\n{record['log']}\n\n--- last output ---\n{tail}",
             )
 
     def _check_early_exit(self, record):
@@ -362,6 +431,14 @@ class MarimoManagerDock(QDockWidget):
         if proc.poll() is None:
             return  # still running — healthy
         tail = self._read_log_tail(record["log"])
+        # A notebook that dies on a missing import is the common case for users
+        # who need geo packages (geopandas, rasterio, …). Offer to install the
+        # missing one into QGIS's Python instead of just showing the traceback.
+        missing = self._missing_module(tail)
+        if missing and self._install_record is None and self._offer_install(
+            missing, os.path.basename(record["path"])
+        ):
+            return
         QMessageBox.warning(
             self,
             "marimo notebook exited",
@@ -369,6 +446,51 @@ class MarimoManagerDock(QDockWidget):
             f"launch.\n\nLog file:\n{record['log']}\n\n"
             f"--- last output ---\n{tail}",
         )
+
+    @staticmethod
+    def _missing_module(text):
+        """Top-level package name from a `ModuleNotFoundError` in the log, if any.
+
+        The import name (e.g. `rasterio`) usually matches the pip distribution
+        name; where it differs the user can correct it via the Setup-tab field.
+        """
+        match = re.search(
+            r"ModuleNotFoundError: No module named ['\"]([A-Za-z0-9_]+)",
+            text,
+        )
+        return match.group(1) if match else None
+
+    def _offer_install(self, package, notebook):
+        """Offer to install a missing package; start it if accepted.
+
+        Returns True if an install was started (so the caller skips the generic
+        exit dialog), False otherwise.
+        """
+        try:
+            packages = validate_package_names(package)
+        except ValueError:
+            return False  # not a clean name — fall through to the exit dialog
+        reply = QMessageBox.question(
+            self,
+            "Missing package",
+            f"'{notebook}' exited because the Python package '{package}' is not "
+            "installed in QGIS's Python.\n\nInstall it now?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return False
+        try:
+            self._install_record = self._pm.install_packages(packages)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(
+                self, "Install packages", f"Could not start the install:\n{exc}"
+            )
+            return False
+        self._status.setText(
+            f"Installing {package} … re-launch the notebook when it finishes."
+        )
+        QTimer.singleShot(1500, self._check_install)
+        return True
 
     @staticmethod
     def _read_log_tail(log_path, max_lines=40):

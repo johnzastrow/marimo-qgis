@@ -13,6 +13,7 @@ from `plugin.runtime.bridge_env()`.
 """
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -23,19 +24,27 @@ from ..runtime import bridge_env, pyqgis_dir, qgis_bridge_dir, qgis_python
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
-# Bootstrap run as `<qgis_python> -c <this>` to install marimo across platforms.
-# It is deliberately platform-agnostic via PROGRESSIVE FALLBACK rather than
-# per-OS branching, because the interpreters differ:
+# Bootstrap run as `<qgis_python> -c <this> <pkg>...` to install packages across
+# platforms. Package names come in via argv (sys.argv[1:]). It is deliberately
+# platform-agnostic via PROGRESSIVE FALLBACK rather than per-OS branching,
+# because the interpreters differ:
 #   - Windows/macOS QGIS ship their own writable Python WITH pip bundled, so the
-#     first strategy (plain `pip install marimo`) succeeds.
+#     first strategy (plain `pip install <pkg>`) succeeds.
 #   - Linux QGIS uses the SYSTEM python (e.g. /usr/bin/python3), which often has
 #     no `pip` module, is root-owned (can't write the system site), and on PEP
 #     668 distros is "externally-managed". So it bootstraps pip via ensurepip,
 #     then falls through to `--user` (installs to ~/.local, no root) and finally
 #     `--user --break-system-packages` for externally-managed system pythons.
 # Every attempt is echoed to stdout, which the dock captures to the log file.
+# argv is dock-validated (validate_package_names) before reaching here, and we
+# pass a list to subprocess (shell=False), so there is no shell/arg injection.
 _INSTALL_BOOTSTRAP = r'''
 import subprocess, sys
+
+pkgs = sys.argv[1:]
+if not pkgs:
+    print("ERROR: no packages specified.", flush=True)
+    sys.exit(2)
 
 def run(args):
     print(">>> " + sys.executable + " " + " ".join(args), flush=True)
@@ -59,18 +68,56 @@ if not have_pip():
         )
         sys.exit(3)
 
-base = ["-m", "pip", "install", "marimo"]
+base = ["-m", "pip", "install"] + pkgs
 rc = 1
 for extra in ([], ["--user"], ["--user", "--break-system-packages"]):
     rc = run(base + extra)
     if rc == 0:
-        print(">>> marimo installed successfully", flush=True)
+        print(">>> installed successfully: " + " ".join(pkgs), flush=True)
         sys.exit(0)
     print(">>> strategy failed (rc=%d); trying next" % rc, flush=True)
 
 print("ERROR: all install strategies failed (rc=%d)." % rc, flush=True)
 sys.exit(rc)
 '''
+
+# A pip requirement token we are willing to hand to the installer: a PEP 508
+# distribution name, optionally with a simple version specifier. The leading
+# char must be alphanumeric — this rejects anything starting with '-', which is
+# what blocks pip-option injection (e.g. "--index-url http://evil/") through the
+# Setup-tab field, and the character class forbids shell metacharacters.
+_PKG_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*"          # distribution name
+    r"(\[[A-Za-z0-9._,-]+\])?"               # optional extras, e.g. [all]
+    r"([<>=!~]=?[0-9A-Za-z._*+!-]+(,[<>=!~]=?[0-9A-Za-z._*+!-]+)*)?$"  # version specs
+)
+
+
+def validate_package_names(raw):
+    """Parse a whitespace/comma-separated package spec into safe pip tokens.
+
+    Returns the list of tokens. Raises ValueError if the field is empty or any
+    token is not a plain PEP 508 name (optionally with extras / a version
+    specifier). This is an allowlist on user input that flows into a subprocess
+    argv: it blocks argument injection (a token starting with '-' smuggling pip
+    options) and shell-metacharacter tokens. Tokens are still passed to
+    subprocess as a list (shell=False), so this is defence in depth.
+    """
+    # Split on whitespace only (NOT commas): a comma separates version
+    # constraints within one spec, e.g. "shapely>=2.0,<3", so it must stay
+    # inside the token. A trailing/leading comma from "geopandas, rasterio"
+    # typing is stripped for friendliness.
+    tokens = [t.strip(",") for t in (raw or "").split() if t.strip(",")]
+    if not tokens:
+        raise ValueError("Enter at least one package name.")
+    bad = [t for t in tokens if not _PKG_RE.match(t)]
+    if bad:
+        raise ValueError(
+            "Not valid package name(s): "
+            + ", ".join(bad)
+            + "\nUse plain names like 'geopandas' or 'rasterio>=1.3'."
+        )
+    return tokens
 
 
 # Cache of interpreters known to have marimo. Probing costs a full interpreter
@@ -133,23 +180,27 @@ class MarimoProcessManager:
         # __del__. Reaped via reap_install() once the dock sees it has exited.
         self._installs = []
 
-    def install_marimo(self):
-        """Install marimo into QGIS's interpreter via a cross-platform bootstrap.
+    def install_packages(self, packages):
+        """Install one or more packages into QGIS's interpreter via the bootstrap.
 
-        Runs `<qgis_python> -c <_INSTALL_BOOTSTRAP>`, which ensures pip exists
-        and progressively falls back (plain -> --user -> --user
+        Runs `<qgis_python> -c <_INSTALL_BOOTSTRAP> <pkg>...`, which ensures pip
+        exists and progressively falls back (plain -> --user -> --user
         --break-system-packages) so the same call works whether QGIS ships its
         own writable Python with pip (Windows/macOS) or runs on a pip-less,
         root-owned, externally-managed system Python (Linux).
 
-        Output is captured to a log file rather than a console window — there is
-        no console on Linux, and on Windows the flashing one closes too fast to
-        read — so failures stay visible (the dock surfaces the log tail). The
-        returned record's "proc" is retained on this manager so it is not GC'd
-        while still running. Returns a record dict with "proc" and "log".
+        `packages` must be a non-empty list of tokens already validated by
+        validate_package_names() — they are passed as subprocess argv (no shell).
+        Output is captured to a log file rather than a console window (there is
+        no console on Linux, and Windows' flashes shut too fast to read), so
+        failures stay visible (the dock surfaces the log tail). The returned
+        record's "proc" is retained on this manager so it is not GC'd while still
+        running. Returns a record dict with "proc", "log" and "packages".
         """
+        if not packages:
+            raise ValueError("No packages to install.")
         python_exe = qgis_python()
-        cmd = [python_exe, "-c", _INSTALL_BOOTSTRAP]
+        cmd = [python_exe, "-c", _INSTALL_BOOTSTRAP, *packages]
 
         # Own process group + suppressed console, mirroring notebook launches.
         if sys.platform == "win32":
@@ -159,10 +210,12 @@ class MarimoProcessManager:
         else:
             isolation = {"start_new_session": True}
 
-        log_path = os.path.join(log_dir(), "pip_install_marimo.log")
+        safe = "".join(c if c.isalnum() else "_" for c in packages[0])[:40]
+        log_path = os.path.join(log_dir(), "pip_install_" + (safe or "pkgs") + ".log")
         fh = open(log_path, "w", encoding="utf-8", errors="replace")
-        fh.write("=== marimo install ===\n")
+        fh.write("=== package install ===\n")
         fh.write("python  : " + python_exe + "\n")
+        fh.write("packages: " + " ".join(packages) + "\n")
         fh.write("command : " + python_exe + " -c <install bootstrap>\n")
         fh.write("=" * 40 + "\n\n")
         fh.flush()
@@ -170,9 +223,14 @@ class MarimoProcessManager:
         proc = subprocess.Popen(
             cmd, stdout=fh, stderr=subprocess.STDOUT, **isolation
         )
-        record = {"proc": proc, "log": log_path, "_fh": fh}
+        record = {"proc": proc, "log": log_path, "_fh": fh, "packages": list(packages)}
         self._installs.append(record)
         return record
+
+    def install_marimo(self):
+        """Install marimo into QGIS's interpreter (thin wrapper, see
+        install_packages). Kept as a named entry point for the dock preflight."""
+        return self.install_packages(["marimo"])
 
     def reap_install(self, record):
         """Drop a finished install record and close its log handle."""
