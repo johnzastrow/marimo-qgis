@@ -104,7 +104,7 @@ class MarimoLauncherPlugin:
             self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self._dock)
             self._dock.hide()  # revealed on demand from the toolbar
 
-            icon_path = os.path.join(self.plugin_dir, "icons", "marimo.svg")
+            icon_path = os.path.join(self.plugin_dir, "icons", "marimoqgis.svg")
             self._action = QAction(
                 QIcon(icon_path), "marimo Notebooks", self.iface.mainWindow()
             )

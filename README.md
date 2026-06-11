@@ -318,7 +318,7 @@ marimo-qgis/
 │   ├── metadata.txt              # plugin name, version, QGIS minimum version
 │   ├── plugin.py                 # plugin class — starts bridge, adds toolbar/dock
 │   ├── runtime.py                # process-wide bridge handle
-│   ├── icons/marimo.svg          # toolbar icon
+│   ├── icons/marimoqgis.svg      # toolbar icon
 │   ├── bridge/                   # localhost HTTP bridge (auth, api, server, convert)
 │   └── ui/                       # dock widget + process manager
 ├── qgis_bridge/                  # notebook-side bridge client (no QGIS dependency)

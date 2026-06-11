@@ -2302,6 +2302,10 @@ qgis_bridge` with no pip install. This supersedes §7 Phase 4's "publish
   Windows, `start_new_session=True` on POSIX). Added a full Windows/macOS testing
   plan at `docs/CROSS_PLATFORM_TESTING.md`. ruff + 23 tests green; `pyqgis_dir()`
   validated to resolve under a QGIS-capable interpreter. CI passing on GitHub.
+- 2026-06-11: **v0.2.0 released** (tag `v0.2.0`; `release.yml` built and attached
+  `marimo_launcher.zip`, verified to bundle `qgis_bridge/`). Then swapped the
+  toolbar/plugin icon to `icons/marimoqgis.svg` (a marimo+QGIS mark); the old
+  `marimo.svg` is kept locally as `marimo_orig.svg` (untracked, not bundled).
 
 ### 8.2 QGIS 4 plugin requirements (from official sources)
 
