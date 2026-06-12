@@ -10,7 +10,6 @@ All Qt imports go through `qgis.PyQt` (D3) so the code works on Qt5 and Qt6.
 """
 
 import os
-import re
 
 from qgis.core import QgsApplication, QgsProject, QgsSettings, QgsTask
 from qgis.PyQt.QtCore import Qt, QTimer
@@ -430,15 +429,12 @@ class MarimoManagerDock(QDockWidget):
         proc = record["proc"]
         if proc.poll() is None:
             return  # still running — healthy
+        # Note: a missing-import error does NOT land here — `marimo edit` keeps
+        # the server alive and surfaces the ModuleNotFoundError in the browser,
+        # not the captured log. Users install missing deps (geopandas, …) by
+        # reading the name off the browser error and entering it in the Setup
+        # tab's package field. This dialog covers genuine startup crashes.
         tail = self._read_log_tail(record["log"])
-        # A notebook that dies on a missing import is the common case for users
-        # who need geo packages (geopandas, rasterio, …). Offer to install the
-        # missing one into QGIS's Python instead of just showing the traceback.
-        missing = self._missing_module(tail)
-        if missing and self._install_record is None and self._offer_install(
-            missing, os.path.basename(record["path"])
-        ):
-            return
         QMessageBox.warning(
             self,
             "marimo notebook exited",
@@ -446,51 +442,6 @@ class MarimoManagerDock(QDockWidget):
             f"launch.\n\nLog file:\n{record['log']}\n\n"
             f"--- last output ---\n{tail}",
         )
-
-    @staticmethod
-    def _missing_module(text):
-        """Top-level package name from a `ModuleNotFoundError` in the log, if any.
-
-        The import name (e.g. `rasterio`) usually matches the pip distribution
-        name; where it differs the user can correct it via the Setup-tab field.
-        """
-        match = re.search(
-            r"ModuleNotFoundError: No module named ['\"]([A-Za-z0-9_]+)",
-            text,
-        )
-        return match.group(1) if match else None
-
-    def _offer_install(self, package, notebook):
-        """Offer to install a missing package; start it if accepted.
-
-        Returns True if an install was started (so the caller skips the generic
-        exit dialog), False otherwise.
-        """
-        try:
-            packages = validate_package_names(package)
-        except ValueError:
-            return False  # not a clean name — fall through to the exit dialog
-        reply = QMessageBox.question(
-            self,
-            "Missing package",
-            f"'{notebook}' exited because the Python package '{package}' is not "
-            "installed in QGIS's Python.\n\nInstall it now?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return False
-        try:
-            self._install_record = self._pm.install_packages(packages)
-        except Exception as exc:  # noqa: BLE001
-            QMessageBox.warning(
-                self, "Install packages", f"Could not start the install:\n{exc}"
-            )
-            return False
-        self._status.setText(
-            f"Installing {package} … re-launch the notebook when it finishes."
-        )
-        QTimer.singleShot(1500, self._check_install)
-        return True
 
     @staticmethod
     def _read_log_tail(log_path, max_lines=40):
