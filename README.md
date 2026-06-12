@@ -15,9 +15,19 @@ improve cross-platform coverage are very welcome.
 
 ## Screenshots
 
+**The setup tab showing the environment**
+
 <img src="docs/screenshots/setup.png" width="400" alt="Setup tab environment report">
 
+
+**Showing available Marimo notebooks**
+
 <img src="docs/screenshots/notebooks.png" width="400" alt="Notebooks and example files">
+
+
+**See it in action**
+
+<img src="docs/screenshots/qgis_marimo.png" width="400" alt="In action">
 
 ---
 
