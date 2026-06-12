@@ -4,7 +4,6 @@
 import marimo
 
 __generated_with = "0.23.9"
-
 app = marimo.App()
 
 
@@ -17,32 +16,32 @@ def _():
 
 @app.cell
 def _(mo):
-    mo.md(
-        """
-        # Push a result back to QGIS
+    mo.md("""
+    # Push a result back to QGIS
 
-        **What this demonstrates.** Reading a live layer, buffering it with
-        geopandas, previewing it, and pushing the result back into the running
-        QGIS project as a new layer.
+    **What this demonstrates.** Reading a live layer, buffering it with
+    geopandas, previewing it, and pushing the result back into the running
+    QGIS project as a new layer.
 
-        **Dependencies.** The bundled `qgis_bridge` client; a running QGIS with
-        the marimo plugin enabled (live mode); `geopandas`. Without the plugin it
-        falls back to a headless `QgsApplication` (nothing to push into).
+    **Dependencies.** The bundled `qgis_bridge` client; a running QGIS with
+    the marimo plugin enabled (live mode); `geopandas`. Without the plugin it
+    falls back to a headless `QgsApplication` (nothing to push into).
 
-        **How it works.** The plugin runs a localhost HTTP bridge; this notebook
-        calls `get_layer` and `insert_layer` over it.
+    **How it works.** The plugin runs a localhost HTTP bridge; this notebook
+    calls `get_layer` and `insert_layer` over it.
 
-        **▶ Run order** — this profile does not auto-run cells on open. Run them
-        top to bottom (or *Run ▸ Run all cells*): **1)** connect · **2)** pick a
-        layer + distance · **3)** preview · **4)** click Push.
-        """
-    )
+    **▶ Run order** — this profile does not auto-run cells on open. Run them
+    top to bottom (or *Run ▸ Run all cells*): **1)** connect · **2)** pick a
+    layer + distance · **3)** preview · **4)** click Push.
+    """)
     return
 
 
 @app.cell
 def _(mo):
-    mo.md("### 1. Connect to QGIS — run the next cell")
+    mo.md("""
+    ### 1. Connect to QGIS — run the next cell
+    """)
     return
 
 
@@ -88,7 +87,9 @@ def _(mode, qgis):
 
 @app.cell
 def _(mo):
-    mo.md("### 2. Pick a source layer and buffer distance")
+    mo.md("""
+    ### 2. Pick a source layer and buffer distance
+    """)
     return
 
 
@@ -120,7 +121,9 @@ def _(mo, names):
 
 @app.cell
 def _(mo):
-    mo.md("### 3. Preview the buffered layer")
+    mo.md("""
+    ### 3. Preview the buffered layer
+    """)
     return
 
 
@@ -148,7 +151,9 @@ def _(distance, mo, mode, qgis, source):
 
 @app.cell
 def _(mo):
-    mo.md("### 4. Push it into QGIS — click the button, result appears below")
+    mo.md("""
+    ### 4. Push it into QGIS — click the button, result appears below
+    """)
     return
 
 
