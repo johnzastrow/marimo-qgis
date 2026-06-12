@@ -11,6 +11,9 @@ separate virtualenv required. Tested on Windows (QGIS 4 / OSGeo4W) and Linux.
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for debugging tips; contributions to
 improve cross-platform coverage are very welcome.
 
+**Setup tab in the plugin**
+[](
+
 ## Version compatibility
 
 | Component | Version |
