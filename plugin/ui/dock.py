@@ -31,7 +31,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..environment import download_examples, report_markdown
 from ..runtime import qgis_python
-from .process import marimo_available, validate_package_names
+from .process import detect_packages, marimo_available, validate_package_names
 from .scaffold import qgis_bridge_root, scaffold_notebook
 
 _DIR_SETTING = "marimo/browse_dir"
@@ -45,7 +45,11 @@ class MarimoManagerDock(QDockWidget):
         self.setObjectName("MarimoManagerDock")
         self._pm = process_manager
         self._server = server
-        self._install_record = None  # in-flight `pip install marimo`, if any
+        self._install_record = None  # in-flight package install, if any
+        # Import names from the last "Detect packages" run, used to verify the
+        # install actually satisfied them. Cleared when the user edits the field
+        # by hand (so verification only applies to a genuine detection).
+        self._detected_imports = []
         self._settings = QgsSettings()
         self._browse_dir = self._settings.value(_DIR_SETTING, "") or (
             QgsProject.instance().homePath() or os.path.expanduser("~")
@@ -63,11 +67,12 @@ class MarimoManagerDock(QDockWidget):
         self._status.setWordWrap(True)
         layout.addWidget(self._status)
 
-        tabs = QTabWidget(container)
-        tabs.addTab(self._build_setup_tab(), "Setup")
-        tabs.addTab(self._build_browse_tab(), "Browse")
-        tabs.addTab(self._build_running_tab(), "Running")
-        layout.addWidget(tabs)
+        self._tabs = QTabWidget(container)
+        self._setup_tab = self._build_setup_tab()
+        self._tabs.addTab(self._setup_tab, "Setup")
+        self._tabs.addTab(self._build_browse_tab(), "Browse")
+        self._tabs.addTab(self._build_running_tab(), "Running")
+        layout.addWidget(self._tabs)
 
         self.setWidget(container)
 
@@ -120,6 +125,10 @@ class MarimoManagerDock(QDockWidget):
         self._pkg_edit = QLineEdit(tab)
         self._pkg_edit.setPlaceholderText("geopandas rasterio shapely>=2.0")
         self._pkg_edit.returnPressed.connect(self._on_install_packages)
+        # A manual edit invalidates a prior detection, so post-install
+        # verification doesn't check imports the user no longer means to install.
+        # textEdited fires only on user input, not on programmatic setText().
+        self._pkg_edit.textEdited.connect(lambda _t: setattr(self, "_detected_imports", []))
         pkg_install = QPushButton("Install", tab)
         pkg_install.setToolTip("Install the listed packages into QGIS's Python")
         pkg_install.clicked.connect(self._on_install_packages)
@@ -159,7 +168,9 @@ class MarimoManagerDock(QDockWidget):
         if reply != QMessageBox.StandardButton.Yes:
             return
         try:
-            self._install_record = self._pm.install_packages(packages)
+            self._install_record = self._pm.install_packages(
+                packages, verify_imports=self._detected_imports
+            )
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(
                 self, "Install packages", f"Could not start the install:\n{exc}"
@@ -252,13 +263,51 @@ class MarimoManagerDock(QDockWidget):
         new = QPushButton("New…", tab)
         new.setToolTip("Create a new marimo + QGIS notebook from a starter template")
         new.clicked.connect(self._on_new)
+        detect = QPushButton("Detect packages", tab)
+        detect.setToolTip(
+            "Find the packages this notebook needs (PEP 723 deps + missing "
+            "imports) and pre-fill them on the Setup tab for install"
+        )
+        detect.clicked.connect(self._on_detect_packages)
         rescan = QPushButton("Refresh", tab)
         rescan.clicked.connect(self._refresh_files)
-        for widget in (launch, new, rescan):
+        for widget in (launch, new, detect, rescan):
             buttons.addWidget(widget)
         layout.addLayout(buttons)
 
         return tab
+
+    def _on_detect_packages(self):
+        """Detect a notebook's package needs and pre-fill the Setup-tab field."""
+        item = self._file_list.currentItem()
+        if item is None:
+            QMessageBox.information(
+                self, "Detect packages", "Select a notebook in the list first."
+            )
+            return
+        path = item.data(Qt.ItemDataRole.UserRole)
+        result = detect_packages(path)
+        suggestions = result["suggestions"]
+        name = os.path.basename(path)
+        if not suggestions:
+            self._detected_imports = []
+            QMessageBox.information(
+                self,
+                "Detect packages",
+                f"No extra packages detected for {name}.\n\n(No PEP 723 "
+                "dependencies, and every import already resolves in QGIS's "
+                "Python.)",
+            )
+            return
+        # setText (not the user) — leaves _detected_imports intact for the
+        # post-install verification of the imports we found missing.
+        self._pkg_edit.setText(" ".join(suggestions))
+        self._detected_imports = result["missing_imports"]
+        self._tabs.setCurrentWidget(self._setup_tab)
+        self._status.setText(
+            f"Detected {len(suggestions)} package(s) for {name} — review on the "
+            "Setup tab and click Install."
+        )
 
     def _build_running_tab(self):
         tab = QWidget()
@@ -406,15 +455,33 @@ class MarimoManagerDock(QDockWidget):
 
         self._install_record = None
         self._pm.reap_install(record)
+        self._detected_imports = []  # consumed by this install
         pkgs = ", ".join(record.get("packages", [])) or "packages"
         if proc.returncode == 0:
-            self._status.setText(f"Installed: {pkgs}")
-            QMessageBox.information(
-                self,
-                "Install complete",
-                f"Installed into QGIS's Python:\n  {pkgs}\n\nLaunched notebooks "
-                "pick this up on their next start.",
-            )
+            # If this came from "Detect packages", confirm the install actually
+            # made the notebook's imports resolve — a wrong/insufficient package
+            # name (e.g. a slim dist missing an extra) otherwise fails silently.
+            still = self._pm.still_missing_imports(record.get("verify_imports", []))
+            if still:
+                self._status.setText(
+                    f"Installed {pkgs}, but {', '.join(still)} still missing."
+                )
+                QMessageBox.warning(
+                    self,
+                    "Installed, but imports still missing",
+                    f"Installed into QGIS's Python:\n  {pkgs}\n\nBut these imports "
+                    f"still fail:\n  {', '.join(still)}\n\nThe package name may be "
+                    "wrong or need an extra (e.g. 'pydantic-ai-slim[anthropic]'). "
+                    "Adjust the name in the field and try again.",
+                )
+            else:
+                self._status.setText(f"Installed: {pkgs}")
+                QMessageBox.information(
+                    self,
+                    "Install complete",
+                    f"Installed into QGIS's Python:\n  {pkgs}\n\nLaunched "
+                    "notebooks pick this up on their next start.",
+                )
         else:
             tail = self._read_log_tail(record["log"])
             self._status.setText(f"Install of {pkgs} failed — see the dialog.")

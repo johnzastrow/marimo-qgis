@@ -12,6 +12,8 @@ The dock widget launches notebooks through this; the bridge connection is read
 from `plugin.runtime.bridge_env()`.
 """
 
+import ast
+import importlib.util
 import os
 import re
 import subprocess
@@ -120,6 +122,134 @@ def validate_package_names(raw):
     return tokens
 
 
+# ---------------------------------------------------------------------------
+# Package detection — reuse marimo's own intelligence to tell the user which
+# packages a notebook needs, then install them into QGIS's Python (NOT marimo's
+# uv sandbox, which a dock-launched notebook can't see). Two sources are merged:
+#   1. PEP 723 `# /// script` declared dependencies (read via marimo's reader);
+#   2. imported modules NOT importable in QGIS's Python, mapped to PyPI names via
+#      marimo's 776-entry table (e.g. cv2 -> opencv-python), import name if none.
+# All marimo imports are optional/defensive: these live under marimo's private
+# `_runtime`/`_utils` namespaces, so if a future marimo moves them we degrade to
+# a plain import scan rather than breaking the dock.
+# ---------------------------------------------------------------------------
+
+# Import names that ship with QGIS / the plugin and must never be "installed".
+_NEVER_INSTALL = {
+    "qgis", "qgis_bridge", "marimo", "PyQt5", "PyQt6", "sip", "osgeo",
+    "processing", "qgis_bridge_root",
+}
+
+
+def _base_name(spec):
+    """Bare distribution name from a requirement spec, for de-duplication.
+
+    Strips extras, version specifiers and markers: "anthropic>=0.40" and
+    "anthropic" both reduce to "anthropic" so the PEP 723 dep and the
+    import-derived suggestion collapse to one entry.
+    """
+    base = re.split(r"[<>=!~;\[\s]", spec, 1)[0]
+    return base.strip().lower().replace("_", "-")
+
+
+def _notebook_imports(source):
+    """Top-level module names imported anywhere in the notebook source.
+
+    Walks the whole AST so imports inside marimo cell functions are included.
+    Relative imports (`from . import x`) are skipped — they are intra-notebook.
+    """
+    names = set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return names
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                names.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.level == 0 and node.module:
+                names.add(node.module.split(".")[0])
+    return names
+
+
+def _module_installed(name):
+    """True if `name` is importable in THIS interpreter (QGIS's own Python).
+
+    The plugin runs inside QGIS, on the same interpreter notebooks launch on, so
+    an in-process check accurately reflects what a launched notebook will see.
+    """
+    if name in sys.modules:
+        return True
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError, ModuleNotFoundError):
+        return False
+
+
+def _pep723_dependencies(source):
+    try:
+        from marimo._utils.inline_script_metadata import (
+            read_pyproject_from_script,
+        )
+        data = read_pyproject_from_script(source) or {}
+        return [d for d in (data.get("dependencies") or []) if isinstance(d, str)]
+    except Exception:  # noqa: BLE001 — marimo internals are optional
+        return []
+
+
+def _pypi_name_map():
+    try:
+        from marimo._runtime.packages.module_name_to_pypi_name import (
+            module_name_to_pypi_name,
+        )
+        return module_name_to_pypi_name()
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def detect_packages(notebook_path):
+    """Inspect a notebook for the packages it needs.
+
+    Returns {"suggestions": [install-name, ...], "missing_imports": [import, ...]}.
+    `suggestions` (ordered, de-duped) merges PEP 723 declared deps with the PyPI
+    names of imports missing from QGIS's Python. `missing_imports` are the raw
+    import names found missing — used to verify the install actually satisfied
+    them. Best-effort: on read error or absent marimo internals it returns what
+    it can (possibly just the import scan, or empty).
+    """
+    try:
+        with open(notebook_path, "r", encoding="utf-8", errors="replace") as fh:
+            source = fh.read()
+    except OSError:
+        return {"suggestions": [], "missing_imports": []}
+
+    suggestions = []
+    seen = set()
+
+    def _add(name):
+        key = _base_name(name)
+        if key and key not in seen:
+            seen.add(key)
+            suggestions.append(name)
+
+    # 1) PEP 723 declared dependencies first, so a versioned/declared spec
+    #    (e.g. "anthropic>=0.40") wins over a bare import-derived name.
+    for dep in _pep723_dependencies(source):
+        _add(dep)
+
+    # 2) Imports missing from QGIS's Python, mapped to PyPI names.
+    mapping = _pypi_name_map()
+    missing_imports = []
+    for mod in sorted(_notebook_imports(source)):
+        if mod in _NEVER_INSTALL or _module_installed(mod):
+            continue
+        missing_imports.append(mod)
+        _add(mapping.get(mod, mod))
+
+    return {"suggestions": suggestions, "missing_imports": missing_imports}
+
+
 # Cache of interpreters known to have marimo. Probing costs a full interpreter
 # startup + `import marimo` (~1.5s), so we run it at most once per interpreter per
 # session. Only positive results are cached: a negative stays uncached so that an
@@ -180,7 +310,7 @@ class MarimoProcessManager:
         # __del__. Reaped via reap_install() once the dock sees it has exited.
         self._installs = []
 
-    def install_packages(self, packages):
+    def install_packages(self, packages, verify_imports=None):
         """Install one or more packages into QGIS's interpreter via the bootstrap.
 
         Runs `<qgis_python> -c <_INSTALL_BOOTSTRAP> <pkg>...`, which ensures pip
@@ -191,11 +321,14 @@ class MarimoProcessManager:
 
         `packages` must be a non-empty list of tokens already validated by
         validate_package_names() — they are passed as subprocess argv (no shell).
-        Output is captured to a log file rather than a console window (there is
-        no console on Linux, and Windows' flashes shut too fast to read), so
-        failures stay visible (the dock surfaces the log tail). The returned
-        record's "proc" is retained on this manager so it is not GC'd while still
-        running. Returns a record dict with "proc", "log" and "packages".
+        `verify_imports`, if given, are import names the dock re-probes after the
+        install to confirm it actually satisfied them (a wrong/insufficient
+        package name otherwise fails silently). Output is captured to a log file
+        rather than a console window (there is no console on Linux, and Windows'
+        flashes shut too fast to read), so failures stay visible (the dock
+        surfaces the log tail). The returned record's "proc" is retained on this
+        manager so it is not GC'd while still running. Returns a record dict with
+        "proc", "log", "packages" and "verify_imports".
         """
         if not packages:
             raise ValueError("No packages to install.")
@@ -223,9 +356,26 @@ class MarimoProcessManager:
         proc = subprocess.Popen(
             cmd, stdout=fh, stderr=subprocess.STDOUT, **isolation
         )
-        record = {"proc": proc, "log": log_path, "_fh": fh, "packages": list(packages)}
+        record = {
+            "proc": proc,
+            "log": log_path,
+            "_fh": fh,
+            "packages": list(packages),
+            "verify_imports": list(verify_imports or []),
+        }
         self._installs.append(record)
         return record
+
+    @staticmethod
+    def still_missing_imports(imports):
+        """Of `imports`, the ones still NOT importable in QGIS's Python.
+
+        Called after an install to confirm it satisfied the notebook's imports.
+        invalidate_caches() lets a just-installed package be discovered without a
+        QGIS restart.
+        """
+        importlib.invalidate_caches()
+        return [m for m in imports if not _module_installed(m)]
 
     def install_marimo(self):
         """Install marimo into QGIS's interpreter (thin wrapper, see
