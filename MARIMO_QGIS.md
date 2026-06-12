@@ -23,10 +23,13 @@ pin.
 
 marimo (and any library a notebook imports) must be installed into QGIS's own
 interpreter. The dock preflight-checks this on launch (`marimo_available()` in
-`plugin/ui/process.py`); if marimo is missing it offers to run
-`python -m pip install marimo` into that interpreter. This also handles QGIS
-Python upgrades gracefully — a new interpreter has a fresh site-packages with no
-marimo, so the plugin simply offers to reinstall.
+`plugin/ui/process.py`); if marimo is missing it offers to install it into that
+interpreter. The dock runs a **cross-platform pip bootstrap**: it ensures pip
+exists (via `ensurepip` if needed), then tries `pip install` and falls back to
+`--user` / `--user --break-system-packages` so it works on a bundled writable
+Python (Windows/macOS) or a read-only/externally-managed system Python (Linux).
+This also handles QGIS Python upgrades gracefully — a new interpreter has a fresh
+site-packages with no marimo, so the plugin simply offers to reinstall.
 
 To install manually:
 
@@ -36,8 +39,9 @@ To install manually:
 ```
 
 ```bash
-# Linux / macOS — the QGIS interpreter may be externally managed (PEP 668) or
-# read-only, so install into the per-user site:
+# Linux — QGIS uses the system Python; if pip is missing, add it once:
+sudo apt install python3-pip
+# then install into the per-user site (externally-managed safe):
 <qgis_python> -m pip install --user marimo
 ```
 
@@ -45,6 +49,19 @@ To install manually:
 > the plugin launch path no longer uses `uv`. The `pyproject.toml`/`uv` workflow
 > (and `./qgis-env.sh setup`) remains a convenient way to *develop* notebooks
 > outside QGIS, but is **not** required to run them from the plugin.
+
+### Installing other packages (geopandas, etc.)
+
+Notebook dependencies go in the **same** interpreter — never a separate venv.
+The dock's Setup tab has an **Install package(s)** field; the Browse tab's
+**Detect packages** button scans a notebook for what it needs (PEP 723
+`# /// script` deps + imports missing from QGIS's Python, mapped to PyPI names
+via marimo's own table) and pre-fills the field. After installing, it verifies
+the imports resolve. The Setup tab's **"Packages available to marimo & QGIS"**
+report is the shareable inventory of what's installed (with `user`/`system`
+location). Do **not** use marimo's in-browser "Install with uv" button for QGIS
+notebooks — it targets a uv sandbox venv without PyQGIS that a dock-launched
+notebook can't see.
 
 ## Running Notebooks
 

@@ -31,6 +31,8 @@ fix; the testing below verifies they actually work on Windows/macOS hardware.
 | A3 | `plugin/ui/process.py` | crash-isolation flag is **platform-aware**: `creationflags=CREATE_NEW_PROCESS_GROUP` on Windows, `start_new_session=True` on POSIX | ✅ fixed |
 | A4 | `plugin/bridge/convert.py` — `os.chmod(dir, 0o700)` | no-op on Windows (NTFS ACLs); harmless | OK as-is |
 | A5 | interpreter resolution | `runtime.qgis_python()` derives QGIS's own interpreter live (Windows `sys.prefix\python.exe`; Unix `sys.executable`/`sys.prefix/bin`); the plugin launches `-m marimo` on it — no venv to build | ✅ fixed |
+| A6 | package install (`process._INSTALL_BOOTSTRAP`) | pip bootstrap with `plain → --user → --user --break-system-packages` fallback covers bundled-writable (Windows/macOS) and pip-less/externally-managed system Python (Linux); Linux may need `python3-pip` once | ✅ verify per-OS |
+| A7 | "what's installed" report | the report's per-user-site location label only distinguishes user-added packages on **Linux**; on Windows/macOS dock installs go to the bundled site-packages, so the dock **records installs in QgsSettings** to list them regardless | ✅ verify on Win/mac |
 
 **To verify on each platform:** open the QGIS Python Console and confirm
 `runtime.pyqgis_dir()` resolves, then run the checklist (§4) — the "🟢 Live" and
@@ -103,16 +105,25 @@ raster step). Then:
 - [ ] The **marimo toolbar button** appears and toggles the dock; **Plugins ▸
       marimo** menu entry present
 
-### B. Dock — Setup, Browse & New
+### B. Dock — Setup, Browse, packages & New
 - [ ] Setup tab: environment report renders (QGIS / Python / GDAL / PROJ / GEOS /
-      Qt versions, package table, CLI-tools table); **Refresh report** works
+      Qt versions, **"Packages available to marimo & QGIS"** table with a
+      `location` column, site-package dirs, CLI-tools table); **Refresh** works
 - [ ] Setup tab: **Save report as…** writes a Markdown file
 - [ ] Setup tab: **Download examples…** fetches `example/` + `notebooks/` into a
       chosen folder (stdlib urllib+zipfile via a QgsTask)
+- [ ] Setup tab: **Install package(s)** — install e.g. `geopandas`; the bootstrap
+      runs (Windows: plain `pip`; Linux: `--user`), a completion dialog appears,
+      and the package then shows in the report (location `system` on Windows where
+      it lands in the bundled site-packages; recorded so it lists either way)
+- [ ] Browse tab: **Detect packages** on a notebook pre-fills the Setup field
+      with PEP 723 deps + missing imports (mapped via marimo's table); installing
+      then verifies the imports resolve
 - [ ] Browse tab: pick a directory, `.py` notebooks are listed
 - [ ] **New…** creates a starter stub; launching it opens marimo in the browser
-- [ ] First launch with marimo absent prompts to `pip install marimo` into QGIS's
-      Python; after install + re-launch it runs
+- [ ] First launch with marimo absent prompts to install marimo into QGIS's
+      Python; after install + re-launch it runs (Linux: needs `python3-pip` first
+      if pip is missing — the dialog says so)
 - [ ] The launched notebook reaches **🟢 Live** (proves `import qgis_bridge` +
       bundled-path injection works on this OS)
 - [ ] Launch log written to `%TEMP%\marimo_qgis_logs\<notebook>.log` (or OS temp

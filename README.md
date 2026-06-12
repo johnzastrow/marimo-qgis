@@ -110,27 +110,54 @@ tree — e.g. on Windows `…\AppData\Roaming\QGIS\QGIS4\profiles\default\python
 Notebooks run on the interpreter QGIS itself uses, so **marimo must be installed
 into that interpreter** (not into a separate venv). The easiest way: open the
 dock and try to launch a notebook — if marimo is missing, the plugin pops a
-dialog offering to run `python -m pip install marimo` into the correct
-interpreter for you. Click **Yes** and re-launch once it finishes.
+dialog offering to install it into the correct interpreter for you. Click **Yes**
+and re-launch once it finishes.
+
+Under the hood the dock runs a small **cross-platform pip bootstrap**: it ensures
+pip exists (via `ensurepip` if needed), then tries `pip install` and falls back
+to a per-user install (`--user`, then `--user --break-system-packages`) so it
+works whether QGIS ships its own writable Python (Windows/macOS) or runs on a
+read-only / externally-managed system Python (Linux). Progress is logged and you
+get a dialog when it finishes.
+
+> **Linux note:** QGIS often uses the **system** Python (`/usr/bin/python3`),
+> which on some distributions has **no pip module**. If the dialog reports
+> `No module named pip`, install pip once with your package manager —
+> `sudo apt install python3-pip` (Debian/Ubuntu) — then retry. marimo then
+> installs into your per-user site (`~/.local/...`); no root needed.
 
 This also makes QGIS Python upgrades graceful: a new QGIS Python has a fresh
 site-packages with no marimo, and the plugin simply offers to reinstall.
 
 To install it manually instead, see
-[Installing marimo into QGIS's Python](#installing-marimo-into-qgiss-python) below.
+[Installing packages into QGIS's Python](#installing-packages-into-qgiss-python) below.
 
 ### 4. Launch a notebook
 
 Click the **marimo toolbar button** to open the dock, then:
 
 - **Setup tab** — review the environment report (QGIS / Python / GDAL / PROJ /
-  GEOS / Qt versions, installed packages, CLI tools) and **Download examples…**
-  to fetch this repo's `example/` and `notebooks/` folders into a folder you
-  choose.
+  GEOS / Qt versions, installed packages, CLI tools), **Download examples…** to
+  fetch this repo's `example/` and `notebooks/` folders, and **install extra
+  Python packages into QGIS's Python** with the package field + **Install**
+  button (e.g. `geopandas rasterio`). Packages go into QGIS's own interpreter —
+  *not* a separate venv — so launched notebooks can import them.
 - **Browse tab** — point at a folder, pick a `.py` notebook, and launch it. Your
   browser opens automatically and the notebook gets a live bridge to the running
-  QGIS project.
+  QGIS project. **Detect packages** inspects the selected notebook (PEP 723
+  `# /// script` deps + imports missing from QGIS's Python, mapped to PyPI names
+  via marimo's own table) and pre-fills the Setup field for you to review and
+  install; after installing it verifies the imports actually resolve.
 - **Running tab** — the notebooks launched this session, with **Stop**.
+
+> **Installing missing packages while you work.** If a notebook cell hits
+> `ModuleNotFoundError`, marimo shows the error **in the browser** (the cell
+> stays editable; the dock isn't notified). Read the package name, type it into
+> the Setup tab's package field, click **Install**, and re-run the cell — or use
+> **Detect packages** before launching. Do **not** use marimo's own "Install with
+> uv" button for QGIS notebooks: it creates a uv sandbox venv that has no PyQGIS
+> and that a dock-launched notebook can't import from. The dock installs into
+> QGIS's Python, which is where notebooks actually look.
 
 Every launch writes the notebook's stdout/stderr to a log file under
 `%TEMP%\marimo_qgis_logs\<notebook>.log` (Windows) or the OS temp dir equivalent.
@@ -161,31 +188,47 @@ using QGIS's interpreter:
 
 ---
 
-## Installing marimo into QGIS's Python
+## Installing packages into QGIS's Python
 
-marimo and any library a notebook imports must live in **QGIS's own
-interpreter** (the same one the Setup tab reports). The plugin can do this for
-you (Step 3 above); to install manually:
+marimo **and any library a notebook imports** must live in **QGIS's own
+interpreter** (the same one the Setup tab reports). A separate venv will not work
+— it has no PyQGIS and reintroduces the interpreter-mismatch failures the launch
+model exists to avoid.
+
+**The recommended way is the dock**: the Setup tab's package field + **Install**
+button (and **Detect packages** on the Browse tab) install into the right
+interpreter for you, with the cross-platform pip bootstrap described in Step 3.
+To install manually instead:
 
 ### Windows (OSGeo4W)
 
 ```powershell
-& cmd /c "C:\OSGeo4W\bin\python-qgis.bat -m pip install marimo"
+& cmd /c "C:\OSGeo4W\bin\python-qgis.bat -m pip install marimo geopandas"
 ```
 
 `pip install` into the OSGeo4W Python works directly.
 
 ### Linux / macOS
 
-The system or bundle Python QGIS uses is often **externally managed** (PEP 668)
-or read-only, so a plain `pip install` may be refused. In that case install into
-the per-user site with `--user`:
+QGIS often uses the **system** Python, which may have **no pip module** and is
+often **externally managed** (PEP 668) or read-only. So:
 
 ```bash
-<qgis_python> -m pip install --user marimo
+# 1. If pip is missing (Linux system Python), install it once:
+sudo apt install python3-pip          # Debian/Ubuntu
+
+# 2. Install into the per-user site (no root; survives PEP 668):
+<qgis_python> -m pip install --user marimo geopandas
+# if still refused as "externally-managed":
+<qgis_python> -m pip install --user --break-system-packages marimo geopandas
 ```
 
-(Some distributions prefer you install marimo from a system package instead.)
+This is exactly the sequence the dock's bootstrap automates. Packages land in
+`~/.local/lib/pythonX.Y/site-packages`, which QGIS's interpreter imports from.
+
+> **Don't install via marimo's in-browser "Install with uv" button** for QGIS
+> notebooks — it targets a uv sandbox venv without PyQGIS, which a dock-launched
+> notebook can't see. Always install into QGIS's own Python (the dock does this).
 
 ---
 
@@ -514,9 +557,14 @@ See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for documented issues including:
 - The console window flashes and closes / `AssertionError: SRE module mismatch` —
   the old `uv run` failure mode, now fixed by running on QGIS's own interpreter
 - A launched notebook exits immediately — check `%TEMP%\marimo_qgis_logs\`
+- `ModuleNotFoundError` for a package (geopandas, …) — install it into QGIS's
+  Python via the Setup tab; the error appears in the marimo browser, not the dock
+- `No module named pip` on Linux — `sudo apt install python3-pip`, then retry
 - `ImportError: libQt6Network.so.6: undefined symbol` — a PyQt6 version conflict
   in a manually-built venv (only affects the optional standalone/`uv` workflow)
 - Cells showing no output in `marimo edit` — stale session cache
+
+A version-by-version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

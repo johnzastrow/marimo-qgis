@@ -505,12 +505,18 @@ inside the plugin). If you see this, the plugin is likely stale (restart QGIS),
 or you launched the notebook outside the plugin. Standalone notebooks add the
 repo root to `sys.path` themselves — only works when run from inside the repo.
 
-### `ModuleNotFoundError: No module named 'geopandas'` (or `rioxarray`)
+### `ModuleNotFoundError: No module named 'geopandas'` (or any package)
 
 `get_layer` / `get_selected_features` / `insert_layer` read FlatGeobuf into a
 GeoDataFrame and need **geopandas**; raster `get_layer` needs **rioxarray**
-(optional). Install them into **QGIS's own Python** (the same interpreter that
-runs the notebook — see the Setup tab for its path):
+(optional). Any package a notebook imports must live in **QGIS's own Python**.
+
+**Easiest:** use the dock. The Setup tab's **Install package(s)** field installs
+into QGIS's Python for you; the Browse tab's **Detect packages** button scans a
+notebook (PEP 723 deps + missing imports) and pre-fills the names. The Setup
+tab's **"Packages available to marimo & QGIS"** report confirms what's installed.
+
+Manual equivalent:
 
 ```powershell
 # Windows (OSGeo4W)
@@ -519,10 +525,40 @@ runs the notebook — see the Setup tab for its path):
 
 ```bash
 # Linux / macOS (add --user if the interpreter is externally managed)
-<qgis_python> -m pip install geopandas rioxarray
+<qgis_python> -m pip install --user geopandas rioxarray
 ```
 
-The Setup tab's package table shows which of these are already present.
+> A missing import shows the `ModuleNotFoundError` **in the marimo browser tab**,
+> not in the dock — `marimo edit` keeps the server alive and reports the error in
+> the cell. Read the package name there, install it via the Setup tab, and re-run
+> the cell. **Do not** use marimo's own "Missing packages → Install with **uv**"
+> button: it installs into a uv sandbox venv that has no PyQGIS and that a
+> dock-launched notebook can't import from. Always install into QGIS's Python.
+
+### `No module named pip` when installing (Linux)
+
+On Linux, QGIS often uses the **system** Python (`/usr/bin/python3`), which on
+some distributions ships without the `pip` module (and sometimes without
+`ensurepip` too). The dock's installer reports this and tells you to install pip
+once via your package manager:
+
+```bash
+sudo apt install python3-pip      # Debian/Ubuntu
+```
+
+Then retry — packages install into your per-user site (`~/.local/...`), no root
+needed. (The dock's bootstrap also tries `ensurepip` automatically first.)
+
+### Installed a package but it's not in the Setup report
+
+The report's **"Packages available to marimo & QGIS"** section lists the
+QGIS/data stack, marimo's dependency tree, packages you installed via the dock,
+and per-user-site installs — with a `location` column (`user` vs `system`).
+Unrelated OS packages are omitted. If something you installed manually with a
+plain (non-`--user`) `pip` on Linux is missing, it likely failed to write the
+system site; reinstall with `--user`. Packages installed through the dock are
+always listed (recorded in QgsSettings, so it works on Windows/macOS too, where
+they land in the bundled site-packages).
 
 ### `BridgeError: bridge 401` / `bridge unreachable`
 

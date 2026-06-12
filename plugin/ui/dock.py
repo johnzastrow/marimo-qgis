@@ -458,6 +458,7 @@ class MarimoManagerDock(QDockWidget):
         self._detected_imports = []  # consumed by this install
         pkgs = ", ".join(record.get("packages", [])) or "packages"
         if proc.returncode == 0:
+            self._record_installed(record.get("packages", []))
             # If this came from "Detect packages", confirm the install actually
             # made the notebook's imports resolve — a wrong/insufficient package
             # name (e.g. a slim dist missing an extra) otherwise fails silently.
@@ -491,6 +492,20 @@ class MarimoManagerDock(QDockWidget):
                 f"pip exited with code {proc.returncode} installing {pkgs}.\n\n"
                 f"Log file:\n{record['log']}\n\n--- last output ---\n{tail}",
             )
+
+    def _record_installed(self, packages):
+        """Remember packages installed via the dock so the Setup report can list
+        them on every platform (on Windows/macOS they land in the bundled
+        site-packages, where a location heuristic can't tell them apart)."""
+        import json
+
+        try:
+            raw = self._settings.value("marimo/installed_packages", "")
+            existing = json.loads(raw) if raw else []
+        except Exception:  # noqa: BLE001
+            existing = []
+        merged = sorted(set(existing) | set(packages))
+        self._settings.setValue("marimo/installed_packages", json.dumps(merged))
 
     def _check_early_exit(self, record):
         proc = record["proc"]
