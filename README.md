@@ -11,8 +11,15 @@ separate virtualenv required. Tested on Windows (QGIS 4 / OSGeo4W) and Linux.
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for debugging tips; contributions to
 improve cross-platform coverage are very welcome.
 
-**Setup tab in the plugin**
-[](
+---
+
+## Screenshots
+
+<img src="docs/screenshots/setup.png" width="400" alt="Setup tab environment report">
+
+<img src="docs/screenshots/notebooks.png" width="400" alt="Notebooks and example files">
+
+---
 
 ## Version compatibility
 
